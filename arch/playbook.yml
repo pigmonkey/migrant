@@ -17,6 +17,8 @@
           - less
           - shellcheck
           - bind-tools
+          - man-db
+          - man-pages
         state: present
         update_cache: true
         extra_args: --needed
