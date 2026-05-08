@@ -13,7 +13,7 @@ DISK_GB=20
 # You must build the image first:
 #   nix build .#nixos-image
 # The resulting qcow2 lands in $VM_DIR/result/nixos-base.qcow2.
-# curl supports file:// protocol, so migrant.sh handles this transparently.
+# curl supports file:// protocol, so migrant handles this transparently.
 IMAGE_URL="file://$(realpath "$VM_DIR/result/nixos-base.qcow2")"
 
 # Shared folders — format is "host_absolute_or_relative_path:guest_tag"
@@ -31,14 +31,14 @@ NETWORKS=(
 #SHARED_FOLDER_ISOLATION=false
 
 # Block the VM from initiating connections to the host and from reaching other
-# hosts on the local network. Enabled by default; requires 'migrant.sh setup'
+# hosts on the local network. Enabled by default; requires 'migrant setup'
 # to have been run. Set to false to opt out.
 #NETWORK_ISOLATION=false
 
 # Cloud-init handles user creation and SSH key injection from the seed ISO.
 CLOUD_INIT_WAIT=true
 
-# Optional: automatically connect after 'migrant.sh up' finishes.
+# Optional: automatically connect after 'migrant up' finishes.
 # Unset by default. Set to "ssh" or "console" to enable.
 AUTOCONNECT=ssh
 

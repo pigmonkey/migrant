@@ -1,7 +1,7 @@
 # test/
 
-Integration tests for migrant.sh. All tests require a working
-`migrant.sh setup` and KVM support on the host.
+Integration tests for migrant. All tests require a working
+`migrant setup` and KVM support on the host.
 
 ---
 
@@ -27,9 +27,9 @@ connectivity matches the Migrantfile configuration.
 
 ```bash
 cd test/<config>
-../../migrant.sh up      # creates VM, runs hooks, verifies via netcheck
-../../migrant.sh halt    # clean shutdown
-../../migrant.sh destroy # remove VM when done
+../../migrant up      # creates VM, runs hooks, verifies via netcheck
+../../migrant halt    # clean shutdown
+../../migrant destroy # remove VM when done
 ```
 
 | Config | What it tests |

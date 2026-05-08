@@ -5,4 +5,4 @@ set -euo pipefail
 router=$(ip route show default | awk '{print $3; exit}')
 
 # Run the LAN host connectivity check
-migrant.sh ssh -- "uv run ~/netcheck.py --no-interactive --lan-ip $router"
+migrant ssh -- "uv run ~/netcheck.py --no-interactive --lan-ip $router"

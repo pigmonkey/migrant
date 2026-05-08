@@ -7,7 +7,7 @@ export LIBVIRT_DEFAULT_URI="qemu:///system"
 #   cd arch && ../test/test-hooks.sh
 #
 # Prerequisites:
-#   - migrant.sh setup has been run
+#   - migrant setup has been run
 #   - The base image is cached (or will be downloaded)
 #   - No VM with this name currently exists (the test creates and destroys one)
 #
@@ -15,7 +15,7 @@ export LIBVIRT_DEFAULT_URI="qemu:///system"
 # and verifies that hooks fired at the right times with the right environment.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-MIGRANT="$(cd "$SCRIPT_DIR/.." && pwd)/migrant.sh"
+MIGRANT="$(cd "$SCRIPT_DIR/.." && pwd)/migrant"
 
 if [[ ! -f Migrantfile ]]; then
   echo "[FAIL] No Migrantfile in $(pwd). Run from a VM directory." >&2

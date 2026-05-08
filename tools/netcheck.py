@@ -4,7 +4,7 @@
 # dependencies = ["rich>=13", "httpx>=0.27"]
 # ///
 """
-netcheck.py — Network connectivity probe for migrant.sh VMs.
+netcheck.py — Network connectivity probe for migrant VMs.
 
 Usage: uv run netcheck.py [options]
 """
@@ -121,7 +121,7 @@ def parse_host_port(spec: str) -> tuple[str, int]:
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
-        description="Network connectivity probe for migrant.sh VMs"
+        description="Network connectivity probe for migrant VMs"
     )
     p.add_argument("--lan-ip", metavar="IP",
                    help="LAN host IP to probe (skips interactive prompt)")

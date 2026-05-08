@@ -1,6 +1,6 @@
 # NixOS example
 
-A minimal NixOS VM managed by migrant.sh.
+A minimal NixOS VM managed by migrant.
 
 Unlike the arch, ubuntu, and debian examples, NixOS does not publish pre-built
 cloud images. The qcow2 is built locally from `flake.nix` instead.
@@ -8,7 +8,7 @@ cloud images. The qcow2 is built locally from `flake.nix` instead.
 ## Prerequisites
 
 - [Nix](https://nixos.org/download/) with flakes enabled
-- migrant.sh host setup complete (`migrant.sh setup`)
+- migrant host setup complete (`migrant setup`)
 
 ## Usage
 
@@ -19,13 +19,13 @@ Build the image (first time only, or after changing `flake.nix`):
 
 Update the SSH key in `cloud-init.yml` to match your managed key:
 
-    migrant.sh pubkey
+    migrant pubkey
 
 Copy the output into the `ssh_authorized_keys` field in `cloud-init.yml`.
 
 Start the VM:
 
-    migrant.sh up
+    migrant up
 
 ## What's in the image
 
@@ -67,8 +67,8 @@ NixOS is declarative, which changes how provisioning works:
 If you change `flake.nix`, rebuild and recreate the VM:
 
     nix build
-    migrant.sh destroy
-    migrant.sh up
+    migrant destroy
+    migrant up
 
 Changes to `cloud-init.yml` also require a destroy/up cycle since
 cloud-init only runs on first boot.

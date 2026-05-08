@@ -1,12 +1,12 @@
 # tools/
 
-Developer and operator tools for working with migrant.sh-managed VMs.
+Developer and operator tools for working with migrant-managed VMs.
 
 ---
 
 ## netcheck.py
 
-A network connectivity probe that runs **inside** a migrant.sh-managed VM.
+A network connectivity probe that runs **inside** a migrant-managed VM.
 Use it to verify that isolation and connectivity settings match your
 Migrantfile expectations before handing the VM to an agent.
 

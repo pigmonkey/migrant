@@ -26,7 +26,7 @@ NETWORKS=(
 )
 
 # Shared folder loop image size in gigabytes. A sparse ext4 image of this size
-# is created the first time 'migrant.sh up' or 'migrant.sh mount' is run. The
+# is created the first time 'migrant up' or 'migrant mount' is run. The
 # image starts at ~67 MB on disk and grows with contents up to this cap.
 # Add workspace.img (or *.img) to .gitignore to avoid committing it.
 SHARED_FOLDER_SIZE_GB=10
@@ -36,7 +36,7 @@ SHARED_FOLDER_SIZE_GB=10
 # shared folder and prevents host processes from following symlinks the VM
 # planted inside the share to reach files elsewhere on the host. Turn it
 # off only if you trust the VM's workload.
-# Changing this after VM creation requires 'migrant.sh destroy && migrant.sh up'.
+# Changing this after VM creation requires 'migrant destroy && migrant up'.
 #SHARED_FOLDER_ISOLATION=false
 
 # Set to "uefi" to use UEFI firmware instead of the default BIOS. Not needed
@@ -45,11 +45,11 @@ SHARED_FOLDER_SIZE_GB=10
 #BOOT_FIRMWARE=uefi
 
 # Block the VM from initiating connections to the host and from reaching other
-# hosts on the local network. Enabled by default; requires 'migrant.sh setup'
+# hosts on the local network. Enabled by default; requires 'migrant setup'
 # to have been run. Set to false to opt out.
 #NETWORK_ISOLATION=false
 
-# Optional: automatically connect after 'migrant.sh up' finishes.
+# Optional: automatically connect after 'migrant up' finishes.
 # Unset by default. Set to "ssh" or "console" to enable.
 AUTOCONNECT=ssh
 

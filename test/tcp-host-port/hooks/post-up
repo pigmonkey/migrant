@@ -2,4 +2,4 @@
 set -euo pipefail
 
 # Run the check from inside the VM
-migrant.sh ssh -- 'uv run ~/netcheck.py --no-interactive --host-port tcp/9999'
+migrant ssh -- 'uv run ~/netcheck.py --no-interactive --host-port tcp/9999'

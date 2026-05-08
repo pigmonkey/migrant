@@ -28,7 +28,7 @@ ZSH_SITE_FUNCTIONS="/usr/share/zsh/site-functions"
 
 usage() {
   cat >&2 <<'EOF'
-Usage: migrant.sh <command> [args]
+Usage: migrant <command> [args]
 
 Setup:
   setup               One-time host setup: configures libvirt networking and
@@ -54,7 +54,7 @@ Shared folder:
 
 Access:
   ssh [-- cmd...]     SSH into the VM as the configured user; optionally run a
-                      remote command (e.g. migrant.sh ssh -- sudo cloud-init status)
+                      remote command (e.g. migrant ssh -- sudo cloud-init status)
   console             Open a serial console session (exit with Ctrl+])
   ip                  Print the VM's IP address
   pubkey              Generate the managed SSH key if needed and print its public key
@@ -104,7 +104,7 @@ require_config() {
 
 require_vm() {
   if ! virsh dominfo "$VM_NAME" &>/dev/null; then
-    echo "[ERROR] VM '$VM_NAME' has not been created. Run 'migrant.sh up' to create it." >&2
+    echo "[ERROR] VM '$VM_NAME' has not been created. Run 'migrant up' to create it." >&2
     exit 1
   fi
 }
@@ -114,7 +114,7 @@ require_running() {
   local state
   state=$(virsh domstate "$VM_NAME")
   if [[ "$state" != "running" ]]; then
-    echo "[ERROR] VM '$VM_NAME' is not running (state: $state). Run 'migrant.sh up' first." >&2
+    echo "[ERROR] VM '$VM_NAME' is not running (state: $state). Run 'migrant up' first." >&2
     exit 1
   fi
 }
@@ -262,7 +262,7 @@ wait_for_cloud_init() {
   if ! ssh "${ssh_opts[@]}" "${user}@${ip}" sudo cloud-init status --wait; then
     echo "" >&2
     echo "[ERROR] cloud-init failed on '$VM_NAME'." >&2
-    echo "  Run 'migrant.sh ssh -- sudo cloud-init status' for details." >&2
+    echo "  Run 'migrant ssh -- sudo cloud-init status' for details." >&2
     exit 70
   fi
   echo "cloud-init done." >&2
@@ -288,7 +288,7 @@ ensure_shared_folder_images() {
   local loop_hook="/etc/libvirt/hooks/qemu.d/migrant-loop"
   if [[ ! -f "$loop_hook" ]]; then
     echo "[ERROR] shared folder isolation is enabled but the loop image hook is not installed." >&2
-    echo "  Run 'migrant.sh setup' first, then re-run this command." >&2
+    echo "  Run 'migrant setup' first, then re-run this command." >&2
     exit 1
   fi
   local size_gb="${SHARED_FOLDER_SIZE_GB:-10}"
@@ -304,7 +304,7 @@ ensure_shared_folder_images() {
         echo "[NOTE] $img_path is $(( actual_size / 1024 / 1024 / 1024 ))G" \
           "but SHARED_FOLDER_SIZE_GB=${size_gb}." >&2
         echo "  To resize: halt the VM, back up workspace/ contents," \
-          "run 'rm $img_path', then 'migrant.sh up'." >&2
+          "run 'rm $img_path', then 'migrant up'." >&2
       fi
     else
       echo "Creating ${size_gb}G shared folder image at $img_path..."
@@ -457,12 +457,12 @@ sync_wireguard_files() {
     "$wg_src" | cut -d: -f1)
   if [[ -z "$wg_endpoint" ]]; then
     echo "[ERROR] wireguard.conf has no Endpoint line." >&2
-    echo "  Edit wireguard.conf and re-run 'migrant.sh up'." >&2
+    echo "  Edit wireguard.conf and re-run 'migrant up'." >&2
     exit 65  # EX_DATAERR
   fi
   if [[ ! "$wg_endpoint" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     echo "[ERROR] wireguard.conf Endpoint must be a numeric IP, not a hostname ($wg_endpoint)." >&2
-    echo "  Edit wireguard.conf and re-run 'migrant.sh up'." >&2
+    echo "  Edit wireguard.conf and re-run 'migrant up'." >&2
     exit 65  # EX_DATAERR
   fi
 
@@ -495,7 +495,7 @@ sync_wireguard_files() {
     "$wg_src")
   if [[ -z "$wg_addrs" ]]; then
     echo "[ERROR] wireguard.conf has no Address line." >&2
-    echo "  Edit wireguard.conf and re-run 'migrant.sh up'." >&2
+    echo "  Edit wireguard.conf and re-run 'migrant up'." >&2
     exit 65  # EX_DATAERR
   fi
   printf '%s' "$wg_addrs" > "$managed_dir/wireguard-address"
@@ -560,7 +560,7 @@ verify_wireguard_tunnel() {
     echo "[WARNING] WireGuard interface $wg_iface has no public key." >&2
     echo "  The PrivateKey in wireguard.conf is likely invalid." >&2
     echo "  The VM is running but cannot reach the internet through the tunnel." >&2
-    echo "  Fix PrivateKey in wireguard.conf, then run: migrant.sh halt && migrant.sh up" >&2
+    echo "  Fix PrivateKey in wireguard.conf, then run: migrant halt && migrant up" >&2
   else
     echo "WireGuard tunnel active: $wg_iface (table $wg_table)." >&2
   fi
@@ -601,7 +601,7 @@ cmd_up() {
         && "$current_base" != "$base_image" \
         && "$current_base" != "$(basename "$SNAPSHOT_PATH")" ]]; then
       echo "[ERROR] VM '$VM_NAME' was built from '$current_base' but Migrantfile" >&2
-      echo "  specifies '$base_image'. Run 'migrant.sh destroy' first." >&2
+      echo "  specifies '$base_image'. Run 'migrant destroy' first." >&2
       exit 78
     fi
 
@@ -745,7 +745,7 @@ EOF
 
   # Identity only — behavioral flags are in /etc/migrant/${VM_NAME}/ files
   # synced by sync_managed_config, not in the description tag.
-  local vm_description="managed-by=migrant.sh"
+  local vm_description="managed-by=migrant"
 
   sync_managed_config
   run_hook "pre-up"
@@ -812,8 +812,8 @@ EOF
       fi
     elif [[ "${CLOUD_INIT_WAIT:-true}" == true ]]; then
       echo "[NOTE] cloud-init is still provisioning in the background." >&2
-      echo "  Monitor progress : migrant.sh ssh -- sudo tail -f /var/log/cloud-init-output.log" >&2
-      echo "  Wait for finish  : migrant.sh ssh -- sudo cloud-init status --wait" >&2
+      echo "  Monitor progress : migrant ssh -- sudo tail -f /var/log/cloud-init-output.log" >&2
+      echo "  Wait for finish  : migrant ssh -- sudo cloud-init status --wait" >&2
     fi
   fi
 
@@ -934,7 +934,7 @@ cmd_setup() {
   # --- qemu hook (network isolation + WireGuard) ---
   cat > "$expected_qemu_hook" << 'MIGRANT_QEMU_EOF'
 #!/bin/bash
-# Managed by migrant.sh
+# Managed by migrant
 set -euo pipefail
 
 VM_NAME="$1"
@@ -962,7 +962,7 @@ hook_log "$VM_NAME" "hook start"
 # (Never call virsh here: hooks run while libvirtd holds the per-domain lock,
 # so calling virsh against the same domain deadlocks.)
 xml=$(cat)
-echo "$xml" | grep -q "managed-by=migrant.sh" || exit 0
+echo "$xml" | grep -q "managed-by=migrant" || exit 0
 
 # Behavioral config is read from managed config files in /etc/migrant/${VM_NAME}/.
 HAS_NETWORK_ISOLATION=false
@@ -1417,7 +1417,7 @@ MIGRANT_QEMU_EOF
 
   cat > "$expected_loop_hook" << 'MIGRANT_LOOP_EOF'
 #!/bin/bash
-# Managed by migrant.sh
+# Managed by migrant
 
 VM_NAME="$1"
 OPERATION="$2"
@@ -1441,7 +1441,7 @@ hook_log "loop-hook start"
 local_xml=$(mktemp)
 trap 'rm -f "$local_xml"' EXIT
 cat > "$local_xml"
-grep -q "managed-by=migrant.sh" "$local_xml" || exit 0
+grep -q "managed-by=migrant" "$local_xml" || exit 0
 
 # Check if shared folder isolation is disabled.
 [[ -f "/etc/migrant/${VM_NAME}/shared-folder-isolation-disabled" ]] && exit 0
@@ -1481,7 +1481,7 @@ mount_shared_folders() {
       # isolation and must not be left thinking it is in effect when it is not.
       # A non-zero exit from a prepare hook causes libvirt to abort VM startup.
       hook_log "error: shared folder image not found: $img_path"
-      hook_log "run 'migrant.sh up' to recreate it"
+      hook_log "run 'migrant up' to recreate it"
       exit 1
     fi
 
@@ -1543,7 +1543,7 @@ MIGRANT_LOOP_EOF
   else
     cat > "$expected_network_hook" << 'MIGRANT_NETWORK_EOF'
 #!/bin/bash
-# Managed by migrant.sh
+# Managed by migrant
 # Libvirt network hook args: $1=network-name $2=operation $3=sub-operation $4=extra
 if [[ "$1" == "migrant" && "$2" == "started" ]]; then
   sysctl -w "net.ipv4.conf.virbr-migrant.rp_filter=0"
@@ -1603,7 +1603,7 @@ NET_EOF
   # --- ZSH completions ---
   if [[ -d "$ZSH_SITE_FUNCTIONS" ]]; then
     cat > "$expected_zsh_completion" << 'MIGRANT_ZSH_EOF'
-#compdef migrant.sh
+#compdef migrant
 
 _migrant() {
   local -a subcommands
@@ -1779,14 +1779,14 @@ cmd_snapshot() {
   echo "Creating snapshot (this may take a few minutes)..."
   qemu-img convert -f qcow2 -O qcow2 "$DISK_PATH" "$SNAPSHOT_PATH"
   echo "Snapshot saved: $SNAPSHOT_PATH"
-  echo "Run 'migrant.sh reset' to rebuild the VM from this snapshot."
+  echo "Run 'migrant reset' to rebuild the VM from this snapshot."
 }
 
 cmd_reset() {
   _MIGRANT_TRIGGER="reset"
   if [[ ! -f "$SNAPSHOT_PATH" ]]; then
     echo "[ERROR] no snapshot found for '$VM_NAME'." >&2
-    echo "  Run 'migrant.sh snapshot' to create one." >&2
+    echo "  Run 'migrant snapshot' to create one." >&2
     exit 1
   fi
 
@@ -1802,7 +1802,7 @@ cmd_reset() {
     done < <(virsh domiflist "$VM_NAME" 2>/dev/null | awk 'NR>2 && $5 ~ /^([0-9a-f]{2}:){5}/ { print $5 }')
   else
     echo "[WARNING] VM '$VM_NAME' domain not found; MAC addresses cannot be preserved." >&2
-    echo "  Network may not work after reset. Run 'migrant.sh destroy && migrant.sh up' instead." >&2
+    echo "  Network may not work after reset. Run 'migrant destroy && migrant up' instead." >&2
   fi
 
   teardown_vm keep_snapshot
@@ -1836,11 +1836,11 @@ check_managed_key_match() {
     echo "[ERROR] cloud-init.yml contains a managed SSH key (comment: 'migrant')" >&2
     echo "  but ~/.ssh/migrant was not found on this host." >&2
     if [[ "$context" == "create" ]]; then
-      echo "  Run 'migrant.sh pubkey' to generate the key, update cloud-init.yml," >&2
-      echo "  then re-run 'migrant.sh up'." >&2
+      echo "  Run 'migrant pubkey' to generate the key, update cloud-init.yml," >&2
+      echo "  then re-run 'migrant up'." >&2
     else
       echo "  Restore ~/.ssh/migrant, or update cloud-init.yml with a new key" >&2
-      echo "  (via 'migrant.sh pubkey') and run 'migrant.sh destroy && migrant.sh up'." >&2
+      echo "  (via 'migrant pubkey') and run 'migrant destroy && migrant up'." >&2
     fi
     exit 66
   fi
@@ -1855,11 +1855,11 @@ check_managed_key_match() {
 
   if [[ "$ci_material" != "$host_material" ]]; then
     echo "[ERROR] the managed key in cloud-init.yml does not match ~/.ssh/migrant.pub." >&2
-    echo "  Update cloud-init.yml with the output of 'migrant.sh pubkey'," >&2
+    echo "  Update cloud-init.yml with the output of 'migrant pubkey'," >&2
     if [[ "$context" == "create" ]]; then
-      echo "  then re-run 'migrant.sh up'." >&2
+      echo "  then re-run 'migrant up'." >&2
     else
-      echo "  then run 'migrant.sh destroy && migrant.sh up' to rebuild." >&2
+      echo "  then run 'migrant destroy && migrant up' to rebuild." >&2
     fi
     exit 78
   fi
@@ -1894,7 +1894,7 @@ build_ssh_opts() {
     if [[ ! -f "$MANAGED_KEY_PATH" ]]; then
       echo "[ERROR] cloud-init.yml references a managed SSH key but ~/.ssh/migrant not found." >&2
       echo "  Restore the key file, or update cloud-init.yml and rebuild with" >&2
-      echo "  'migrant.sh destroy && migrant.sh up'." >&2
+      echo "  'migrant destroy && migrant up'." >&2
       exit 66
     fi
     if [[ ! -f "${MANAGED_KEY_PATH}.pub" ]]; then
@@ -1905,15 +1905,15 @@ build_ssh_opts() {
     host_material=$(awk '{print $2}' "${MANAGED_KEY_PATH}.pub")
     if [[ "$managed_material" != "$host_material" ]]; then
       echo "[ERROR] the managed key in cloud-init.yml does not match ~/.ssh/migrant.pub." >&2
-      echo "  Update cloud-init.yml with 'migrant.sh pubkey' and rebuild with" >&2
-      echo "  'migrant.sh destroy && migrant.sh up'." >&2
+      echo "  Update cloud-init.yml with 'migrant pubkey' and rebuild with" >&2
+      echo "  'migrant destroy && migrant up'." >&2
       exit 78
     fi
     _opts+=(-i "$MANAGED_KEY_PATH" -o IdentitiesOnly=yes)
   else
     if ! vm_has_ssh; then
       echo "[ERROR] no ssh_authorized_keys found in cloud-init.yml." >&2
-      echo "  Add your public key and rebuild with 'migrant.sh destroy && migrant.sh up'." >&2
+      echo "  Add your public key and rebuild with 'migrant destroy && migrant up'." >&2
       exit 78
     fi
   fi
@@ -2042,7 +2042,7 @@ cmd_provision() {
   else
     echo "" >&2
     echo "[ERROR] Ansible provisioning failed. The VM is still running." >&2
-    echo "  Fix playbook.yml and run 'migrant.sh provision' to retry." >&2
+    echo "  Fix playbook.yml and run 'migrant provision' to retry." >&2
     exit 70
   fi
 }
@@ -2085,14 +2085,14 @@ cmd_mount() {
     if $vm_running; then
       echo "[ERROR] VM '$VM_NAME' is running but $host_path is not mounted." >&2
       echo "  The QEMU hook should have mounted it. Check the hook is installed" >&2
-      echo "  by re-running 'migrant.sh setup', then halt and restart the VM." >&2
+      echo "  by re-running 'migrant setup', then halt and restart the VM." >&2
       exit 1
     fi
 
     mkdir -p "$host_path"
     echo "Mounting $img_path at $host_path (requires sudo)..."
     sudo mount -o loop,nosymfollow "$img_path" "$host_path"
-    echo "  Mounted. Unmount with 'migrant.sh unmount' when done."
+    echo "  Mounted. Unmount with 'migrant unmount' when done."
   done
 }
 
@@ -2111,7 +2111,7 @@ cmd_unmount() {
   if virsh dominfo "$VM_NAME" &>/dev/null \
       && [[ "$(virsh domstate "$VM_NAME")" == "running" ]]; then
     echo "[ERROR] VM '$VM_NAME' is running." >&2
-    echo "  Halt the VM with 'migrant.sh halt' before unmounting." >&2
+    echo "  Halt the VM with 'migrant halt' before unmounting." >&2
     exit 1
   fi
 
@@ -2160,7 +2160,7 @@ cmd_status() {
         ;;
       crashed)
         printf '%-*s%s\n' "$w" 'state:' 'crashed [ERROR]'
-        printf '  %-*s%s\n' "$sw" 'note:' "run 'migrant.sh destroy' then 'migrant.sh up' to rebuild"
+        printf '  %-*s%s\n' "$sw" 'note:' "run 'migrant destroy' then 'migrant up' to rebuild"
         ;;
       blocked)
         printf '%-*s%s\n' "$w" 'state:' 'blocked [WARNING]'
@@ -2325,7 +2325,7 @@ cmd_storage() {
 
   # --- Discover migrant-managed VM names ---
 
-  # libvirt_vm_set: VMs currently defined in libvirt with managed-by=migrant.sh.
+  # libvirt_vm_set: VMs currently defined in libvirt with managed-by=migrant.
   # migrant_vm_set: superset — also includes VMs found only via orphaned files.
   # virsh_queried: only annotate '(destroyed)' when we successfully asked libvirt,
   # to avoid falsely marking all VMs as destroyed when libvirtd is not running.
@@ -2340,7 +2340,7 @@ cmd_storage() {
       local vname
       while IFS= read -r vname; do
         [[ -z "$vname" ]] && continue
-        if virsh desc "$vname" 2>/dev/null | grep -q "managed-by=migrant.sh"; then
+        if virsh desc "$vname" 2>/dev/null | grep -q "managed-by=migrant"; then
           libvirt_vm_set["$vname"]=1
           migrant_vm_set["$vname"]=1
         fi
@@ -2348,7 +2348,7 @@ cmd_storage() {
     fi
   fi
 
-  # From seed ISOs: *-seed.iso naming is unique to migrant.sh; catches VMs
+  # From seed ISOs: *-seed.iso naming is unique to migrant; catches VMs
   # that no longer exist in libvirt (e.g. after 'destroy' with leftover files)
   local f
   for f in "${all_files[@]+"${all_files[@]}"}"; do

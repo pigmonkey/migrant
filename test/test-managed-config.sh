@@ -7,13 +7,13 @@ export LIBVIRT_DEFAULT_URI="qemu:///system"
 #   cd arch && ../test/test-managed-config.sh
 #
 # Prerequisites:
-#   - migrant.sh setup has been run (with the updated hooks)
+#   - migrant setup has been run (with the updated hooks)
 #   - The base image is cached (or will be downloaded)
 #   - No VM with this name currently exists (the test creates and destroys one)
 #   - NETWORK_ISOLATION not explicitly set to false in the Migrantfile (default is on)
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-MIGRANT="$(cd "$SCRIPT_DIR/.." && pwd)/migrant.sh"
+MIGRANT="$(cd "$SCRIPT_DIR/.." && pwd)/migrant"
 
 if [[ ! -f Migrantfile ]]; then
   echo "[FAIL] No Migrantfile in $(pwd). Run from a VM directory." >&2
@@ -139,7 +139,7 @@ fi
 
 # Check that vm description is identity-only
 local_desc=$(virsh desc "$VM_NAME" 2>/dev/null || true)
-if echo "$local_desc" | grep -q "managed-by=migrant.sh"; then
+if echo "$local_desc" | grep -q "managed-by=migrant"; then
   pass "VM description contains managed-by identity"
 else
   fail "VM description missing managed-by identity"

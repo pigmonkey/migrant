@@ -1,4 +1,4 @@
-# migrant.sh
+# migrant
 
 A lightweight, Vagrant-like VM management tool for Linux, built on
 **libvirt + QEMU/KVM**. Define a VM in a `Migrantfile` file, drop a
@@ -28,7 +28,7 @@ every line, often redirecting it down another path.
 
 Vagrant is a solid tool, but has some drawbacks for this use case:
 
-|                         | Vagrant + VirtualBox             | migrant.sh + KVM                         |
+|                         | Vagrant + VirtualBox             | migrant + KVM                            |
 | ----------------------- | -------------------------------- | ---------------------------------------- |
 | Hypervisor              | VirtualBox (userspace)           | KVM (Linux kernel native)                |
 | Shared folders          | `vboxsf` via guest kernel module | `virtiofs` via host daemon               |
@@ -43,7 +43,7 @@ increases the attack surface between the guest and host. `virtiofs`
 instead uses a daemon on the host side; the guest interacts with it over
 a virtio channel without any special kernel module. Combined with KVM's
 smaller hypervisor attack surface compared to VirtualBox, this makes
-`migrant.sh` a better fit for running untrusted or autonomous workloads.
+`migrant` a better fit for running untrusted or autonomous workloads.
 
 ---
 
@@ -61,12 +61,12 @@ Each project directory contains these files:
   playbook for ongoing configuration management: installing packages,
   deploying dotfiles, and anything that may change over the VM's lifetime
 
-The `migrant.sh` script lives in your `PATH` and reads these files from
+The `migrant` script lives in your `PATH` and reads these files from
 the current directory by default, just like `vagrant` reads a `Vagrantfile`.
 Alternatively, set the `MIGRANT_DIR` environment variable to point at the
-project directory and run `migrant.sh` from anywhere (see [MIGRANT_DIR](#migrant_dir)).
+project directory and run `migrant` from anywhere (see [MIGRANT_DIR](#migrant_dir)).
 
-On first `migrant.sh up`, the script:
+On first `migrant up`, the script:
 
 1. Downloads the base cloud image (once, cached in `/var/lib/libvirt/images/`)
 2. Creates a qcow2 disk using the base image as a backing file
@@ -80,12 +80,12 @@ On first `migrant.sh up`, the script:
    provisioning; `up` blocks until done and the VM is fully ready when it
    returns
 
-On subsequent `migrant.sh up` calls, the VM already exists so the script
+On subsequent `migrant up` calls, the VM already exists so the script
 starts it with `virsh start`, then waits for SSH if configured.
 
-Destroying the VM with `migrant.sh destroy` removes the libvirt domain
+Destroying the VM with `migrant destroy` removes the libvirt domain
 and deletes the VM's disk, seed ISO, and any snapshot, leaving the
-cached base image intact so the next `migrant.sh up` is fast.
+cached base image intact so the next `migrant up` is fast.
 
 ---
 
@@ -93,7 +93,7 @@ cached base image intact so the next `migrant.sh up` is fast.
 
 ### Prerequisites: verify KVM support
 
-`migrant.sh` relies on KVM hardware acceleration. Without it, VMs are
+`migrant` relies on KVM hardware acceleration. Without it, VMs are
 created via software emulation and are impractically slow. Verify that
 your CPU supports virtualization and that it is enabled in BIOS before
 continuing:
@@ -128,11 +128,11 @@ Ansible runs on the host and connects to the VM over SSH. An SSH key must
 be configured in `cloud-init.yml` (see [Managed SSH key](#managed-ssh-key-recommended))
 before running Ansible.
 
-### 2. Install migrant.sh
+### 2. Install migrant
 
 ```bash
-cp migrant.sh ~/bin/migrant.sh
-chmod +x ~/bin/migrant.sh
+cp migrant ~/bin/migrant
+chmod +x ~/bin/migrant
 ```
 
 Make sure `~/bin` is in your `PATH`. Add this to your `~/.bashrc` or
@@ -145,10 +145,10 @@ export PATH="$PATH:$HOME/bin"
 ### 3. Run one-time host setup
 
 ```bash
-migrant.sh setup
+migrant setup
 ```
 
-This configures everything needed to use migrant.sh: enables the libvirtd and
+This configures everything needed to use migrant: enables the libvirtd and
 virtlogd sockets, adds your user to the `libvirt` group, detects the host
 firewall backend (iptables or nftables) and updates `/etc/libvirt/network.conf`
 to match, defines the `migrant` NAT network, creates the images directory with
@@ -160,10 +160,10 @@ is set.
 
 If your user was not already in the `libvirt` group, setup will add it and then
 fail — the group change is not live in the current session. Log out and back in
-(or run `newgrp libvirt`) and re-run `migrant.sh setup` to complete the
+(or run `newgrp libvirt`) and re-run `migrant setup` to complete the
 remaining steps.
 
-`setup` is idempotent — re-run it after upgrading migrant.sh to update the hooks.
+`setup` is idempotent — re-run it after upgrading migrant to update the hooks.
 
 #### Firewall caveats
 
@@ -213,15 +213,15 @@ First, generate the managed SSH key and add it to `cloud-init.yml`
 
 ```bash
 cd ubuntu
-migrant.sh pubkey    # generates ~/.ssh/migrant if needed; prints the public key
+migrant pubkey    # generates ~/.ssh/migrant if needed; prints the public key
 ```
 
 Paste the output into `cloud-init.yml` under `ssh_authorized_keys`. The
-comment must remain `migrant` so migrant.sh recognises it. Then:
+comment must remain `migrant` so migrant recognises it. Then:
 
 ```bash
-migrant.sh up        # creates VM, runs cloud-init + Ansible; blocks until ready
-migrant.sh ssh
+migrant up        # creates VM, runs cloud-init + Ansible; blocks until ready
+migrant ssh
 ```
 
 ---
@@ -233,32 +233,32 @@ Run commands from the project directory containing `Migrantfile`, or set
 
 ```bash
 # Setup
-migrant.sh setup              # One-time host setup: configures libvirt networking and installs firewall hooks
+migrant setup              # One-time host setup: configures libvirt networking and installs firewall hooks
 
 # Lifecycle
-migrant.sh up                 # Create the VM if it does not exist, or start it if stopped; runs Ansible provisioning (if playbook.yml exists) on first create; waits until the VM is fully ready; connects automatically if AUTOCONNECT is set in the Migrantfile
-migrant.sh halt               # Gracefully shut down the VM
-migrant.sh destroy            # Stop and permanently delete the VM, its disk, and any snapshots
-migrant.sh status             # Show the VM's current state and snapshot availability
-migrant.sh provision          # Run the Ansible playbook (playbook.yml) against the running VM
-migrant.sh snapshot           # Shut down the VM and save a snapshot of its disk; VM stays down afterward
-migrant.sh reset              # Destroy the VM and rebuild it from the last snapshot
+migrant up                 # Create the VM if it does not exist, or start it if stopped; runs Ansible provisioning (if playbook.yml exists) on first create; waits until the VM is fully ready; connects automatically if AUTOCONNECT is set in the Migrantfile
+migrant halt               # Gracefully shut down the VM
+migrant destroy            # Stop and permanently delete the VM, its disk, and any snapshots
+migrant status             # Show the VM's current state and snapshot availability
+migrant provision          # Run the Ansible playbook (playbook.yml) against the running VM
+migrant snapshot           # Shut down the VM and save a snapshot of its disk; VM stays down afterward
+migrant reset              # Destroy the VM and rebuild it from the last snapshot
 
 # Shared folder
-migrant.sh mount              # Mount the shared folder loop image for host-side access; creates the image if it does not exist
-migrant.sh unmount            # Unmount the shared folder loop image
+migrant mount              # Mount the shared folder loop image for host-side access; creates the image if it does not exist
+migrant unmount            # Unmount the shared folder loop image
 
 # Access
-migrant.sh ssh [-- cmd...]    # SSH into the VM as the configured user; optionally run a remote command (e.g. migrant.sh ssh -- sudo cloud-init status)
-migrant.sh console            # Open a serial console session (exit with Ctrl+])
-migrant.sh ip                 # Print the VM's IP address
-migrant.sh pubkey             # Generate the managed SSH key if needed and print its public key
-migrant.sh tz [zone]          # Sync the host timezone to the VM, or set an explicit zone (e.g. America/New_York); defaults to the host timezone
+migrant ssh [-- cmd...]    # SSH into the VM as the configured user; optionally run a remote command (e.g. migrant ssh -- sudo cloud-init status)
+migrant console            # Open a serial console session (exit with Ctrl+])
+migrant ip                 # Print the VM's IP address
+migrant pubkey             # Generate the managed SSH key if needed and print its public key
+migrant tz [zone]          # Sync the host timezone to the VM, or set an explicit zone (e.g. America/New_York); defaults to the host timezone
 
 # Diagnostics
-migrant.sh storage            # List IMAGES_DIR contents grouped by base images and VMs, with file sizes; works without a Migrantfile
-migrant.sh wg                 # Show live WireGuard interface status, including transfer stats and latest handshake; requires sudo
-migrant.sh dominfo            # Show detailed libvirt domain info for the VM
+migrant storage            # List IMAGES_DIR contents grouped by base images and VMs, with file sizes; works without a Migrantfile
+migrant wg                 # Show live WireGuard interface status, including transfer stats and latest handshake; requires sudo
+migrant dominfo            # Show detailed libvirt domain info for the VM
 ```
 
 ### Typical workflow
@@ -266,25 +266,25 @@ migrant.sh dominfo            # Show detailed libvirt domain info for the VM
 ```bash
 # First time
 cd ~/my-agent-vm
-migrant.sh up          # creates VM, runs cloud-init + Ansible; blocks until ready
-migrant.sh ssh         # connect and do any manual one-time setup (e.g. auth)
-migrant.sh snapshot    # save this known-good state
+migrant up          # creates VM, runs cloud-init + Ansible; blocks until ready
+migrant ssh         # connect and do any manual one-time setup (e.g. auth)
+migrant snapshot    # save this known-good state
 
 # Day-to-day
-migrant.sh up       # start
-migrant.sh halt     # stop when done
+migrant up       # start
+migrant halt     # stop when done
 
 # Restore to snapshot
-migrant.sh reset    # wipe and rebuild from snapshot; Ansible does not re-run
+migrant reset    # wipe and rebuild from snapshot; Ansible does not re-run
                     # (the snapshot already contains its output)
 
 # Update provisioning after changing playbook.yml
-migrant.sh up
-migrant.sh provision   # re-run the Ansible playbook; VM stays running
+migrant up
+migrant provision   # re-run the Ansible playbook; VM stays running
 
 # Start completely fresh
-migrant.sh destroy
-migrant.sh up
+migrant destroy
+migrant up
 ```
 
 ### MIGRANT_DIR
@@ -293,16 +293,16 @@ Set `MIGRANT_DIR` to the path of a project directory to run any command
 without `cd`-ing into it first:
 
 ```bash
-MIGRANT_DIR=~/migrant/ubuntu migrant.sh up
-MIGRANT_DIR=~/migrant/ubuntu migrant.sh halt
+MIGRANT_DIR=~/migrant/ubuntu migrant up
+MIGRANT_DIR=~/migrant/ubuntu migrant halt
 ```
 
 The typical use is to define a shell alias:
 
 ```bash
-alias mig-a="MIGRANT_DIR=$HOME/migrant/arch migrant.sh"
-alias mig-d="MIGRANT_DIR=$HOME/migrant/debian migrant.sh"
-alias mig-u="MIGRANT_DIR=$HOME/migrant/ubuntu migrant.sh"
+alias mig-a="MIGRANT_DIR=$HOME/migrant/arch migrant"
+alias mig-d="MIGRANT_DIR=$HOME/migrant/debian migrant"
+alias mig-u="MIGRANT_DIR=$HOME/migrant/ubuntu migrant"
 ```
 
 After which you can manage the VM from anywhere:
@@ -319,11 +319,11 @@ literally.
 
 Shared folder paths in `Migrantfile` that do not begin with `/` are always
 resolved relative to the `Migrantfile`'s directory, regardless of where
-`migrant.sh` is invoked from.
+`migrant` is invoked from.
 
 ### Waiting for the VM to be ready
 
-`migrant.sh up` blocks until the VM obtains a DHCP lease (unless
+`migrant up` blocks until the VM obtains a DHCP lease (unless
 `AUTOCONNECT=console` is set and no `playbook.yml` is present, in which
 case it attaches the console immediately after the VM starts). If the VM
 stops running while waiting (e.g. due to a crash or misconfiguration),
@@ -347,7 +347,7 @@ the background when `up` returns.
 
 Setting `AUTOCONNECT` in the Migrantfile causes `up` to connect
 automatically once the VM is ready, without needing a separate
-`migrant.sh ssh` or `migrant.sh console` invocation:
+`migrant ssh` or `migrant console` invocation:
 
 ```bash
 AUTOCONNECT=ssh      # connect via SSH after up completes
@@ -360,19 +360,19 @@ present, provisioning runs first and the console attaches afterward.
 
 ### Network lifecycle
 
-`migrant.sh up` starts the `migrant` libvirt network (`virbr-migrant`, 192.168.200.0/24) automatically
-if it exists but is not currently active. `migrant.sh setup` only creates
+`migrant up` starts the `migrant` libvirt network (`virbr-migrant`, 192.168.200.0/24) automatically
+if it exists but is not currently active. `migrant setup` only creates
 (defines) the network — starting it is left to `up` so the network is not
 running unnecessarily when no VMs are in use.
 
-`migrant.sh halt` shuts down any libvirt networks listed in the `NETWORKS`
+`migrant halt` shuts down any libvirt networks listed in the `NETWORKS`
 config that are no longer in use. If other running VMs are still attached to a
 network, it is left running; otherwise it is stopped. This keeps the libvirt
 bridge interfaces off the host when idle.
 
 ### Serial console vs SSH
 
-`migrant.sh console` opens a serial console via `virsh console`. This is
+`migrant console` opens a serial console via `virsh console`. This is
 not SSH — it connects directly to the VM's serial port, like a physical
 terminal. To exit the console, press `Ctrl+]`.
 
@@ -398,7 +398,7 @@ users:
     passwd: "$6$..."   # openssl passwd -6 yourpassword
 ```
 
-`migrant.sh ssh` looks up the VM's IP address and SSHes in as the first
+`migrant ssh` looks up the VM's IP address and SSHes in as the first
 user defined in `cloud-init.yml`.
 
 Host key verification is disabled (`StrictHostKeyChecking=no`,
@@ -408,16 +408,16 @@ cause a standard SSH client to refuse the connection.
 
 #### Managed SSH key (recommended)
 
-migrant.sh can manage a dedicated passphrase-less SSH key at
+migrant can manage a dedicated passphrase-less SSH key at
 `~/.ssh/migrant`, shared across all VMs that use it. This is detected
 automatically: if `cloud-init.yml` contains a key whose comment is
-`migrant`, migrant.sh uses `~/.ssh/migrant` exclusively for SSH
+`migrant`, migrant uses `~/.ssh/migrant` exclusively for SSH
 connections (`IdentitiesOnly=yes`).
 
 First-time setup:
 
 ```bash
-migrant.sh pubkey    # generates ~/.ssh/migrant if needed; prints the public key
+migrant pubkey    # generates ~/.ssh/migrant if needed; prints the public key
 ```
 
 Paste the output into `cloud-init.yml` under `ssh_authorized_keys`:
@@ -432,19 +432,19 @@ users:
 Then create the VM:
 
 ```bash
-migrant.sh up
-migrant.sh ssh       # uses ~/.ssh/migrant automatically
+migrant up
+migrant ssh       # uses ~/.ssh/migrant automatically
 ```
 
-migrant.sh verifies at `up` time that the key in `cloud-init.yml` matches
+migrant verifies at `up` time that the key in `cloud-init.yml` matches
 `~/.ssh/migrant.pub` and errors early if not, since a mismatch would mean
 the VM boots with a key the host cannot use. If `~/.ssh/migrant` is ever
-lost, run `migrant.sh pubkey` to regenerate it, update `cloud-init.yml`,
-and rebuild with `migrant.sh destroy && migrant.sh up`.
+lost, run `migrant pubkey` to regenerate it, update `cloud-init.yml`,
+and rebuild with `migrant destroy && migrant up`.
 
 #### Manual key management
 
-Without a `migrant`-commented key, migrant.sh expects you to have added
+Without a `migrant`-commented key, migrant expects you to have added
 your own public key to `cloud-init.yml` and will error if
 `ssh_authorized_keys` is absent. SSH uses whichever keys are available
 in your agent or default identity files:
@@ -461,20 +461,20 @@ users:
 Arguments after `--` are passed through as a remote command:
 
 ```bash
-migrant.sh ssh -- sudo cloud-init status --wait
-migrant.sh ssh -- sudo tail -f /var/log/cloud-init-output.log
+migrant ssh -- sudo cloud-init status --wait
+migrant ssh -- sudo tail -f /var/log/cloud-init-output.log
 ```
 
-`migrant.sh ip` prints the VM's IP address, which is useful for
+`migrant ip` prints the VM's IP address, which is useful for
 scripting or for connecting with tools other than SSH.
 
 ### storage
 
-`migrant.sh storage` can be run from any directory, with or without a
+`migrant storage` can be run from any directory, with or without a
 `Migrantfile`. It lists everything in `IMAGES_DIR`, grouped by category:
 
 ```console
-$ migrant.sh storage
+$ migrant storage
 Directory: /var/lib/libvirt/images (16.1G)
 Base Images:
   Arch-Linux-x86_64-cloudimg.qcow2 (519M)
@@ -498,13 +498,13 @@ Other:
 ```
 
 `(destroyed)` means the VM's files are still on disk but the VM no longer
-exists in libvirt. `migrant.sh destroy` removes both the libvirt domain and
+exists in libvirt. `migrant destroy` removes both the libvirt domain and
 its image files, so this should not normally occur — it typically means the
 VM was undefined directly with `virsh undefine`, or the files were left
 behind after some other manual intervention. They are safe to remove.
 
-Files in the **Other** category are not managed by migrant.sh — they may
-belong to VMs defined outside of migrant.sh, or be leftover files from
+Files in the **Other** category are not managed by migrant — they may
+belong to VMs defined outside of migrant, or be leftover files from
 other tools.
 
 ---
@@ -518,7 +518,7 @@ All VM-related files are stored in `/var/lib/libvirt/images/`:
 | Base image | `ubuntu-25.10-server-cloudimg-amd64.img` | Shared read-only backing file; downloaded once       |
 | VM disk    | `claude.qcow2`                           | Per-VM qcow2 overlay (copy-on-write over base image) |
 | Seed ISO   | `claude-seed.iso`                        | cloud-init data for first-boot provisioning          |
-| Snapshot   | `claude-snapshot.qcow2`                  | Flattened disk image saved by `migrant.sh snapshot`  |
+| Snapshot   | `claude-snapshot.qcow2`                  | Flattened disk image saved by `migrant snapshot`  |
 
 The qcow2 overlay means:
 
@@ -526,9 +526,9 @@ The qcow2 overlay means:
   own disk
 - The base image is never modified
 - Multiple VMs can share the same base image simultaneously
-- `migrant.sh destroy` deletes the VM's disk, seed ISO, and snapshot;
+- `migrant destroy` deletes the VM's disk, seed ISO, and snapshot;
   the base image remains
-- `migrant.sh reset` also deletes the disk and seed ISO but preserves
+- `migrant reset` also deletes the disk and seed ISO but preserves
   the snapshot, then calls `up` to rebuild from it
 
 To free the base image:
@@ -567,7 +567,7 @@ in a `Migrantfile` to opt out. When active, iptables rules are added that:
   explicit)
 
 The rules are removed automatically when the VM stops or is destroyed.
-This requires `migrant.sh setup` to have been run to install the libvirt
+This requires `migrant setup` to have been run to install the libvirt
 hook.
 
 ### Host access rules
@@ -628,13 +628,13 @@ workspace files are inside the image and not directly accessible on the
 host. To access them:
 
 ```bash
-migrant.sh mount    # mounts workspace.img → workspace/ (requires sudo)
+migrant mount    # mounts workspace.img → workspace/ (requires sudo)
 # ... read, write, copy files in workspace/ ...
-migrant.sh unmount  # unmounts (requires sudo)
+migrant unmount  # unmounts (requires sudo)
 ```
 
-`migrant.sh mount` can also be used to pre-populate the workspace before
-the first `migrant.sh up`.
+`migrant mount` can also be used to pre-populate the workspace before
+the first `migrant up`.
 
 To opt out of the loop image and use a plain host directory instead, set
 `SHARED_FOLDER_ISOLATION=false` in the `Migrantfile`. This restores the
@@ -660,7 +660,7 @@ ubuntu/
 └── wireguard.conf      ← drop any wg-quick config here
 ```
 
-`migrant.sh up` validates the config and syncs it to a root-owned
+`migrant up` validates the config and syncs it to a root-owned
 directory (`/etc/migrant/<vm-name>/`) before starting the VM. The hook
 brings up the tunnel as part of VM startup and tears it down when the
 VM stops.
@@ -685,7 +685,7 @@ IPv6 from the VM is dropped at the `FORWARD` chain (shared with the
 network isolation rule). The fwmark routing is IPv4-only; without
 this rule IPv6 would bypass the tunnel.
 
-`migrant.sh up` verifies the tunnel is active before returning. If the
+`migrant up` verifies the tunnel is active before returning. If the
 WireGuard interface or routing rule is missing, or the marking rule was
 not applied within 5 seconds, `up` halts the VM and exits with an
 error so the VM never runs un-tunneled.
@@ -695,7 +695,7 @@ error so the VM never runs un-tunneled.
 DNS behaviour depends on whether `wireguard.conf` contains a `DNS =`
 line:
 
-- **With `DNS =`**: migrant.sh intercepts all DNS traffic from the VM
+- **With `DNS =`**: migrant intercepts all DNS traffic from the VM
   with a `nat PREROUTING` DNAT rule and rewrites the destination to the
   VPN's DNS server. The VM continues to believe it is talking to the
   libvirt resolver (`192.168.200.1`); conntrack reverses the
@@ -705,7 +705,7 @@ line:
 - **Without `DNS =`**: a warning is printed and DNS falls back to the
   host's resolver via libvirt's dnsmasq. Queries are not tunneled.
 
-`migrant.sh status` shows which DNS mode is active:
+`migrant status` shows which DNS mode is active:
 
 ```
 tunnel:     active
@@ -725,7 +725,7 @@ The VM cannot bypass it:
 - DNS interception via DNAT is also host-side. The VM cannot make DNS
   queries to an off-tunnel resolver by targeting a different IP — all
   port-53 traffic is rewritten.
-- If the tunnel fails to come up, `migrant.sh up` halts the VM rather
+- If the tunnel fails to come up, `migrant up` halts the VM rather
   than letting it run un-tunneled.
 - IPv6 is blocked at the FORWARD chain (shared with the network isolation rule) so there is no IPv6 leak path.
 
@@ -769,7 +769,7 @@ ubuntu/
 ```
 
 Hooks are executable files — any language works. They run as the invoking
-user (not root), so they follow the same privilege model as `migrant.sh`
+user (not root), so they follow the same privilege model as `migrant`
 itself. Missing or non-executable hooks are silently skipped.
 
 ### Hook semantics
@@ -826,10 +826,10 @@ systemctl --user stop lemonade.service
 
 ### Security notes
 
-Hooks run as the user who invoked `migrant.sh`, not as root. If a hook
+Hooks run as the user who invoked `migrant`, not as root. If a hook
 needs privileged operations (e.g. managing firewall rules, binding
 devices), use `sudo` within the hook script — this is the same model
-as `migrant.sh mount` and `migrant.sh wg`.
+as `migrant mount` and `migrant wg`.
 
 Hooks are stored in the VM directory alongside the `Migrantfile`.
 Because the `Migrantfile` itself is sourced as bash with no sandboxing,
@@ -867,16 +867,16 @@ If you have an existing VM created before the loop image was introduced
 
 ```bash
 # 1. Re-run setup to install the new shared folder hook
-migrant.sh setup
+migrant setup
 
 # 2. Halt the VM if it is running
-migrant.sh halt
+migrant halt
 
 # 3. Move workspace contents out
 mv workspace/ ~/workspace-backup/
 
 # 4. Start the VM — this creates workspace.img, mounts it, then starts
-migrant.sh up
+migrant up
 
 # 5. Copy files into the now-mounted workspace/
 cp -a ~/workspace-backup/. workspace/
@@ -885,10 +885,10 @@ cp -a ~/workspace-backup/. workspace/
 Alternatively, pre-populate the image before starting the VM:
 
 ```bash
-migrant.sh halt
+migrant halt
 mv workspace/ ~/workspace-backup/
-migrant.sh mount            # creates workspace.img and mounts it
+migrant mount            # creates workspace.img and mounts it
 cp -a ~/workspace-backup/. workspace/
-migrant.sh unmount
-migrant.sh up
+migrant unmount
+migrant up
 ```

@@ -12,7 +12,7 @@ export LIBVIRT_DEFAULT_URI="qemu:///system"
 # virtio-blk disk through the hook and checking the domain XML.
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-MIGRANT="$(cd "$SCRIPT_DIR/.." && pwd)/migrant.sh"
+MIGRANT="$(cd "$SCRIPT_DIR/.." && pwd)/migrant"
 
 if [[ ! -f Migrantfile ]]; then
   echo "[FAIL] No Migrantfile in $(pwd). Run from a VM directory." >&2

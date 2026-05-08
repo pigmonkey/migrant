@@ -1,5 +1,5 @@
 {
-  description = "NixOS qcow2 cloud image for migrant.sh";
+  description = "NixOS qcow2 cloud image for migrant";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
@@ -22,7 +22,7 @@
             # --- Disk image builder ---
             system.build.qcow2 = import "${modulesPath}/../lib/make-disk-image.nix" {
               inherit lib config pkgs;
-              baseName = "nixos-base";    # avoid collision with migrant.sh's {VM_NAME}.qcow2
+              baseName = "nixos-base";    # avoid collision with migrant's {VM_NAME}.qcow2
               diskSize = "auto";          # shrink to fit; growpart expands at boot
               format = "qcow2";
               partitionTableType = "legacy";  # MBR — no EFI partition needed
@@ -51,7 +51,7 @@
 
             # --- Cloud-init ---
             # SSH keys and user creation are handled by cloud-init at boot
-            # (from the seed ISO that migrant.sh generates), keeping the base
+            # (from the seed ISO that migrant generates), keeping the base
             # image generic and reusable across key changes.
             services.cloud-init.enable = true;
             # Override default cloud_final_modules to remove
@@ -99,7 +99,7 @@
 
             # --- Packages ---
             environment.systemPackages = with pkgs; [
-              cloud-init  # CLI must be on PATH for migrant.sh's cloud-init status --wait
+              cloud-init  # CLI must be on PATH for migrant's cloud-init status --wait
               git
               unzip
             ];

@@ -2,12 +2,12 @@
 set -euo pipefail
 
 # Run netcheck in isolation-only mode (no --host-port, no --lan-ip)
-migrant.sh ssh -- 'uv run ~/netcheck.py --no-interactive'
+migrant ssh -- 'uv run ~/netcheck.py --no-interactive'
 
 # Additional manual check: verify the VM cannot reach the gateway on port 80.
 # In pure isolation mode this connection MUST fail — a successful connect
 # would mean isolation is broken.
-if migrant.sh ssh -- 'python3 -c "import socket; s=socket.socket(); s.settimeout(3); s.connect((\"192.168.200.1\", 80))"' 2>/dev/null; then
+if migrant ssh -- 'python3 -c "import socket; s=socket.socket(); s.settimeout(3); s.connect((\"192.168.200.1\", 80))"' 2>/dev/null; then
   echo "FAIL: VM was able to connect to gateway 192.168.200.1:80 — isolation is broken" >&2
   exit 1
 fi

@@ -1,7 +1,7 @@
-# migrant.sh
+# migrant
 
 A single-file bash VM management tool built on libvirt/QEMU/KVM. One script
-(`migrant.sh`), one example VM config (`claude/`).
+(`migrant`), one example VM config (`claude/`).
 
 ## Purpose
 
@@ -19,7 +19,7 @@ careful consideration. Key containment properties to preserve:
 
 ## Code style
 
-- Run `shellcheck migrant.sh` after every change — must be clean
+- Run `shellcheck migrant` after every change — must be clean
 - Run `uvx ansible-lint arch/playbook.yml ubuntu/playbook.yml debian/playbook.yml` after changes to any playbook
 - The script uses `set -euo pipefail`; follow these patterns:
   - Empty array expansion: `"${ARRAY[@]+"${ARRAY[@]}"}"`
@@ -132,13 +132,13 @@ do that work unconditionally in `pre-up`; the args file is only for initial
 
 ## Managed config pattern
 
-`/etc/migrant/${VM_NAME}/` is the data channel between unprivileged migrant.sh
+`/etc/migrant/${VM_NAME}/` is the data channel between unprivileged migrant
 and the privileged qemu/loop hooks. `sync_managed_config()` validates and writes
 all behavioral config (network isolation flag, shared folder isolation flag,
 HOST_ACCESS rules, WireGuard files) before the VM starts. The hooks read these
 files at runtime.
 
-The VM description tag carries only identity (`managed-by=migrant.sh`). All
+The VM description tag carries only identity (`managed-by=migrant`). All
 behavioral config comes from managed config files. The hooks fall back to the
 description tag for VMs created before this pattern was introduced.
 

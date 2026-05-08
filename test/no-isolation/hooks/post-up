@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # Run the check from inside the VM (no --host-port, no --lan-ip — just verify basics)
-migrant.sh ssh -- 'uv run ~/netcheck.py --no-interactive'
+migrant ssh -- 'uv run ~/netcheck.py --no-interactive'
 
 # Manual check: confirm the VM can reach the gateway on port 53 (dnsmasq)
 # With isolation disabled this TCP connection must succeed
-migrant.sh ssh -- 'python3 -c "import socket; s=socket.socket(); s.settimeout(3); s.connect((\"192.168.200.1\", 53)); print(\"connected\")"'
+migrant ssh -- 'python3 -c "import socket; s=socket.socket(); s.settimeout(3); s.connect((\"192.168.200.1\", 53)); print(\"connected\")"'
 echo "no-isolation: gateway TCP connection succeeded as expected"

@@ -5,4 +5,4 @@ set -euo pipefail
 router=$(ip route show default | awk '{print $3; exit}')
 
 # Run the check from inside the VM with both flags
-migrant.sh ssh -- "uv run ~/netcheck.py --no-interactive --host-port tcp/9999 --lan-ip $router"
+migrant ssh -- "uv run ~/netcheck.py --no-interactive --host-port tcp/9999 --lan-ip $router"
