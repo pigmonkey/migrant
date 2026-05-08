@@ -1,7 +1,7 @@
 #cloud-config
 users:
   - name: migrant
-    groups: [wheel]
+    groups: [sudo]
     sudo: "ALL=(ALL) NOPASSWD:ALL"
     shell: /bin/bash
     lock_passwd: false

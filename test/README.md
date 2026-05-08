@@ -7,7 +7,7 @@ Integration tests for migrant. All tests require a working
 
 ## Shell test scripts
 
-Run from any VM directory (e.g. `cd arch && ../test/test-hooks.sh`):
+Run from any VM directory (e.g. `cd debian && ../test/test-hooks.sh`):
 
 - **test-hooks.sh** — lifecycle hook execution, ordering, and environment
   variables
@@ -63,4 +63,4 @@ exists and just runs it.
 
 ### Shared cloud-init
 
-All configs use a copy of `test/cloud-init.yml` (Arch Linux, python3, uv).
+All configs use a copy of `test/cloud-init.yml` (Debian, python3, uv).
