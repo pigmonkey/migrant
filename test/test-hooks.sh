@@ -4,7 +4,7 @@ export LIBVIRT_DEFAULT_URI="qemu:///system"
 
 # Integration test for lifecycle hooks.
 # Run from a VM directory that has a working Migrantfile + cloud-init.yml:
-#   cd debian && ../test/test-hooks.sh
+#   cd arch && ../test/test-hooks.sh
 #
 # Prerequisites:
 #   - migrant setup has been run

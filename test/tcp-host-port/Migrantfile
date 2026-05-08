@@ -1,6 +1,6 @@
 # VM identity
 VM_NAME="test-tcp-host-port"
-OS_VARIANT="debian13"
+OS_VARIANT="archlinux"
 
 # Resources
 RAM_MB=2048
@@ -8,8 +8,7 @@ VCPUS=2
 DISK_GB=10
 
 # Base image
-IMAGE_URL="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-generic-amd64.qcow2"
-BOOT_FIRMWARE=uefi
+IMAGE_URL="https://geo.mirror.pkgbuild.com/images/latest/Arch-Linux-x86_64-cloudimg.qcow2"
 
 # Network
 NETWORKS=(

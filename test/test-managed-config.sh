@@ -4,7 +4,7 @@ export LIBVIRT_DEFAULT_URI="qemu:///system"
 
 # Integration test for managed config and HOST_ACCESS.
 # Run from a VM directory that has a working Migrantfile + cloud-init.yml:
-#   cd debian && ../test/test-managed-config.sh
+#   cd arch && ../test/test-managed-config.sh
 #
 # Prerequisites:
 #   - migrant setup has been run (with the updated hooks)
