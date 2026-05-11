@@ -1,0 +1,15 @@
+#cloud-config
+users:
+  - name: migrant
+    groups: [wheel]
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    shell: /bin/bash
+    lock_passwd: false
+    plain_text_passwd: "migrant"
+    ssh_authorized_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIH/11hxpeV5+xvp0dpMbLF2yGAdc8wDwETCWIeiMsFoZ migrant
+
+package_update: true
+packages:
+  - python3
+  - uv

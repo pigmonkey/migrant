@@ -1311,6 +1311,27 @@ apply_rules() {
             local spec="${rule#allow-host-port }"
             local proto="${spec%%/*}"
             local port="${spec#*/}"
+            # DNAT VM-bound traffic to 127.0.0.1 so the VM can reach
+            # services regardless of bind address. Without this, services
+            # bound only to localhost on the host die at the socket layer
+            # because no listener answers on the bridge IP — the dominant
+            # default for upstream dev tooling (Next.js, uvicorn, postgres,
+            # redis, ...).
+            #
+            # Benign for services bound to 0.0.0.0: they listen on every
+            # interface including 127.0.0.1, so DNAT just retargets the
+            # packet to a listener that already exists. Connection source
+            # is unchanged (DNAT rewrites destination only) so any
+            # source-IP-based access checks in the service still see the
+            # real VM IP.
+            #
+            # route_localnet=1 is required because the kernel otherwise
+            # drops packets routed to 127/8 from non-loopback interfaces.
+            # Per-interface scope; other host interfaces are unaffected.
+            sysctl -w "net.ipv4.conf.virbr-migrant.route_localnet=1" >/dev/null
+            iptables -t nat -I PREROUTING -m physdev --physdev-in "$iface" \
+              -p "$proto" --dport "$port" \
+              -j DNAT --to-destination 127.0.0.1:"$port"
             iptables -I "$CHAIN" -p "$proto" --dport "$port" \
               -m conntrack --ctstate NEW -j ACCEPT
             hook_log "$vm" "host-access: allow-host-port $proto/$port"
@@ -1360,11 +1381,23 @@ remove_rules() {
     iptables -F "$CHAIN" 2>/dev/null || true
     iptables -X "$CHAIN" 2>/dev/null || true
 
-    # Remove per-host FORWARD ACCEPT rules added by host-access allow-lan-host.
+    # Remove per-rule FORWARD/PREROUTING rules added by host-access. The per-VM
+    # CHAIN is flushed and deleted above, so the INPUT ACCEPTs added by
+    # allow-host-port are already gone with the chain. Rules outside that
+    # chain (FORWARD ACCEPTs for allow-lan-host, nat PREROUTING DNATs for
+    # allow-host-port) need explicit removal here.
     local ha_file="/etc/migrant/${vm}/host-access"
     if [[ -f "$ha_file" ]]; then
       while IFS= read -r rule; do
         case "$rule" in
+          allow-host-port\ *)
+            local spec="${rule#allow-host-port }"
+            local proto="${spec%%/*}"
+            local port="${spec#*/}"
+            iptables -t nat -D PREROUTING -m physdev --physdev-in "$iface" \
+              -p "$proto" --dport "$port" \
+              -j DNAT --to-destination 127.0.0.1:"$port" 2>/dev/null || true
+            ;;
           allow-lan-host\ *)
             local host_ip="${rule#allow-lan-host }"
             iptables -D FORWARD -m physdev --physdev-in "$iface" \

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Run the check from inside the VM. The host listener is bound to
+# 127.0.0.1 only, so a successful connection here proves the DNAT
+# leg of allow-host-port is rewriting the destination.
+migrant ssh -- 'uv run ~/netcheck.py --no-interactive --host-port tcp/9998'

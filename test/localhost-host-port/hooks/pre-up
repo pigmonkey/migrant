@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+PIDFILE="${MIGRANT_VM_DIR}/.listener.pid"
+
+# Clean up any stale listener
+if [[ -f "$PIDFILE" ]]; then
+  pid=$(<"$PIDFILE")
+  if kill -0 "$pid" 2>/dev/null; then
+    kill "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+  fi
+  rm -f "$PIDFILE"
+fi
+
+# Start a TCP listener bound to 127.0.0.1 (NOT 0.0.0.0). The whole point
+# of this test is exercising the DNAT leg of allow-host-port — binding to
+# all interfaces would make this test indistinguishable from tcp-host-port
+# and would mask DNAT regressions.
+python3 -c "
+import socketserver
+class H(socketserver.StreamRequestHandler):
+    def handle(self):
+        self.wfile.write(b'hello from host (localhost-bound)\n')
+socketserver.TCPServer(('127.0.0.1', 9998), H).serve_forever()
+" &
+
+echo $! > "$PIDFILE"
