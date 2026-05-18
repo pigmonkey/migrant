@@ -589,32 +589,11 @@ HOST_ACCESS=(
 | `allow-host-port <proto/port>` | Allow the VM to connect to the specified host port, regardless of the service's bind address |
 | `allow-lan-host <ip>` | Allow the VM to reach a specific host on the local network |
 
-`allow-host-port` inserts an ACCEPT rule in the per-VM INPUT chain
-(before the blanket REJECT) and a per-VM DNAT rule in the `nat`
-PREROUTING chain that rewrites traffic destined for the bridge IP to
-`127.0.0.1`. The DNAT step is what lets the VM reach services bound
-only to localhost on the host — the dominant default for upstream
-dev tooling (Next.js dev, uvicorn, Postgres, Redis, …). It is benign
-for services bound to `0.0.0.0`, which listen on every interface
-including loopback and answer the rewritten packet without trouble.
-The connection's source IP is unchanged (DNAT rewrites destination
-only), so any source-based access checks in the service still see
-the real VM IP.
-
-DNAT to `127.0.0.1` requires `net.ipv4.conf.virbr-migrant.route_localnet=1`,
-which `allow-host-port` enables on first use. The setting is per-interface;
-other host interfaces remain unaffected. The host service stays bound to
-whatever it was bound to before — strictly less exposure than rebinding
-to `0.0.0.0` and relying on a firewall to filter back down to the VM.
-
-The rare case `allow-host-port` does *not* cover is a service bound to
-a specific external IP that is neither loopback nor `0.0.0.0` (e.g.
-the bridge IP itself, or a LAN-facing interface). DNAT would rewrite
-traffic away from that listener. If you hit this, file an issue.
-
-`allow-lan-host` inserts an ACCEPT in the FORWARD chain before the
-RFC 1918 REJECT rules. All directives are removed automatically when
-the VM stops.
+`allow-host-port` inserts an ACCEPT in the per-VM INPUT chain and DNATs
+traffic to `127.0.0.1`, so the VM can reach host services regardless of
+bind address. `allow-lan-host` inserts an ACCEPT in the FORWARD chain
+before the RFC 1918 REJECT rules. All directives are removed automatically
+when the VM stops.
 
 `HOST_ACCESS` has no effect when isolation is disabled (`NETWORK_ISOLATION=false`) —
 there is nothing to poke holes in.
