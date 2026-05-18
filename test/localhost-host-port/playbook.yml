@@ -1,0 +1,10 @@
+---
+- name: Stage netcheck.py for VM-side connectivity tests
+  hosts: all
+  become: false
+  tasks:
+    - name: Copy netcheck.py to VM home
+      ansible.builtin.copy:
+        src: "{{ playbook_dir }}/../../tools/netcheck.py"
+        dest: /home/migrant/netcheck.py
+        mode: "0755"

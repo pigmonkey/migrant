@@ -1,0 +1,28 @@
+# VM identity
+VM_NAME="test-localhost-host-port"
+OS_VARIANT="archlinux"
+
+# Resources
+RAM_MB=2048
+VCPUS=2
+DISK_GB=10
+
+# Base image
+IMAGE_URL="https://geo.mirror.pkgbuild.com/images/latest/Arch-Linux-x86_64-cloudimg.qcow2"
+
+# Network
+NETWORKS=(
+  "network=migrant"
+)
+
+# Host access rules
+#
+# Companion to tcp-host-port/, which binds the listener to 0.0.0.0.
+# This config binds the listener to 127.0.0.1 specifically — the
+# dominant default for upstream dev tooling — to verify the DNAT
+# leg of allow-host-port actually bridges the gap. Without DNAT,
+# the firewall ACCEPT alone would let packets through but no socket
+# would answer on the bridge IP.
+HOST_ACCESS=(
+  "allow-host-port tcp/9998"
+)

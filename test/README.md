@@ -34,8 +34,9 @@ cd test/<config>
 
 | Config | What it tests |
 | ------ | ------------- |
-| `tcp-host-port/` | `allow-host-port tcp/9999` — TCP listener on host, VM connects through isolation |
+| `tcp-host-port/` | `allow-host-port tcp/9999` against a listener bound to `0.0.0.0` — covers the easy case |
 | `udp-host-port/` | `allow-host-port udp/9999` — UDP listener on host, VM sends datagram through isolation |
+| `localhost-host-port/` | `allow-host-port tcp/9998` against a listener bound to **`127.0.0.1`** — exercises the DNAT leg |
 | `lan-host/` | `allow-lan-host` — VM reaches the host's default router (auto-detected) |
 | `multi-rule/` | Combined `allow-host-port tcp/9999` + `allow-lan-host` in a single config |
 | `isolation-only/` | Default isolation with no HOST_ACCESS — verifies the VM cannot reach the host |

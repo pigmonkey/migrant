@@ -1311,6 +1311,12 @@ apply_rules() {
             local spec="${rule#allow-host-port }"
             local proto="${spec%%/*}"
             local port="${spec#*/}"
+            # DNAT to 127.0.0.1: reach services bound to localhost on the host.
+            # route_localnet=1 required: kernel drops packets to 127/8 from non-loopback interfaces.
+            sysctl -w "net.ipv4.conf.virbr-migrant.route_localnet=1" >/dev/null
+            iptables -t nat -I PREROUTING -m physdev --physdev-in "$iface" \
+              -p "$proto" --dport "$port" \
+              -j DNAT --to-destination 127.0.0.1:"$port"
             iptables -I "$CHAIN" -p "$proto" --dport "$port" \
               -m conntrack --ctstate NEW -j ACCEPT
             hook_log "$vm" "host-access: allow-host-port $proto/$port"
@@ -1360,11 +1366,19 @@ remove_rules() {
     iptables -F "$CHAIN" 2>/dev/null || true
     iptables -X "$CHAIN" 2>/dev/null || true
 
-    # Remove per-host FORWARD ACCEPT rules added by host-access allow-lan-host.
+    # Remove FORWARD/PREROUTING rules outside the per-VM chain (already flushed above).
     local ha_file="/etc/migrant/${vm}/host-access"
     if [[ -f "$ha_file" ]]; then
       while IFS= read -r rule; do
         case "$rule" in
+          allow-host-port\ *)
+            local spec="${rule#allow-host-port }"
+            local proto="${spec%%/*}"
+            local port="${spec#*/}"
+            iptables -t nat -D PREROUTING -m physdev --physdev-in "$iface" \
+              -p "$proto" --dport "$port" \
+              -j DNAT --to-destination 127.0.0.1:"$port" 2>/dev/null || true
+            ;;
           allow-lan-host\ *)
             local host_ip="${rule#allow-lan-host }"
             iptables -D FORWARD -m physdev --physdev-in "$iface" \

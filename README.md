@@ -586,13 +586,14 @@ HOST_ACCESS=(
 
 | Directive | Effect |
 | --------- | ------ |
-| `allow-host-port <proto/port>` | Allow the VM to connect to the specified host port |
+| `allow-host-port <proto/port>` | Allow the VM to connect to the specified host port, regardless of the service's bind address |
 | `allow-lan-host <ip>` | Allow the VM to reach a specific host on the local network |
 
-`allow-host-port` inserts an ACCEPT rule in the per-VM INPUT chain
-before the blanket REJECT. `allow-lan-host` inserts an ACCEPT in the
-FORWARD chain before the RFC 1918 REJECT rules. Both are removed
-automatically when the VM stops.
+`allow-host-port` inserts an ACCEPT in the per-VM INPUT chain and DNATs
+traffic to `127.0.0.1`, so the VM can reach host services regardless of
+bind address. `allow-lan-host` inserts an ACCEPT in the FORWARD chain
+before the RFC 1918 REJECT rules. All directives are removed automatically
+when the VM stops.
 
 `HOST_ACCESS` has no effect when isolation is disabled (`NETWORK_ISOLATION=false`) —
 there is nothing to poke holes in.
