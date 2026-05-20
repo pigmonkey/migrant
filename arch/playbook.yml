@@ -19,6 +19,7 @@
           - bind-tools
           - man-db
           - man-pages
+          - strace
         state: present
         update_cache: true
         extra_args: --needed
