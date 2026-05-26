@@ -250,6 +250,7 @@ migrant unmount            # Unmount the shared folder loop image
 
 # Access
 migrant ssh [-- cmd...]    # SSH into the VM as the configured user; optionally run a remote command (e.g. migrant ssh -- sudo cloud-init status)
+migrant tunnel [PORT...]   # Open SSH local-forwards from host to VM. Without args, uses TUNNEL_PORTS from Migrantfile.
 migrant console            # Open a serial console session (exit with Ctrl+])
 migrant ip                 # Print the VM's IP address
 migrant pubkey             # Generate the managed SSH key if needed and print its public key
@@ -602,6 +603,28 @@ Combined with [lifecycle hooks](#lifecycle-hooks), this enables
 host-side service patterns: a hook starts a systemd service before the
 VM boots, `HOST_ACCESS` opens the port, and a hook stops the service
 when the VM shuts down.
+
+### Port tunneling (host → VM)
+
+Services running inside the VM are reachable from the host at the VM's
+bridge IP, but apps that hardcode `http://127.0.0.1:PORT` (e.g. compiled
+client bundles) won't find them. `migrant tunnel` opens SSH local-forwards
+so `127.0.0.1:PORT` on the host routes into the VM.
+
+```
+migrant tunnel 3000 5432           # one-off
+```
+
+Configure defaults per-VM in `Migrantfile`:
+
+```bash
+TUNNEL_PORTS=(3000 5432 6379)
+```
+
+Then `migrant tunnel` with no args opens all of them. Ctrl-C closes the
+session and removes the forwards — no persistent state, no firewall
+rules, no cleanup. Internally this just runs `ssh -N -L PORT:127.0.0.1:PORT`
+using the same connection settings as `migrant ssh`.
 
 ### Shared folder isolation
 
