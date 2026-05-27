@@ -2038,7 +2038,7 @@ cmd_tunnel() {
   local -a ports
   if (( $# > 0 )); then
     ports=("$@")
-  elif declare -p TUNNEL_PORTS &>/dev/null && (( ${#TUNNEL_PORTS[@]} > 0 )); then
+  elif [[ -n "${TUNNEL_PORTS+x}" ]] && (( ${#TUNNEL_PORTS[@]} > 0 )); then
     ports=("${TUNNEL_PORTS[@]}")
   else
     echo "[ERROR] no ports to forward." >&2
