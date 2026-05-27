@@ -50,6 +50,12 @@ AUTOCONNECT=ssh
 #  "allow-lan-host 192.168.1.50"     # VM can reach a specific LAN host
 #)
 
+# Local SSH port-forwards opened by `migrant tunnel`. Each entry is a port
+# number; the host's 127.0.0.1:PORT routes to the VM's 127.0.0.1:PORT for
+# the lifetime of the SSH session.
+#
+#TUNNEL_PORTS=(3000 5432 6379)
+
 # Lifecycle hooks — executable scripts in hooks/ run at VM state transitions:
 #   hooks/pre-up      before VM starts (can abort)
 #   hooks/post-up     after VM is fully ready
