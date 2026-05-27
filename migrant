@@ -55,6 +55,8 @@ Shared folder:
 Access:
   ssh [-- cmd...]     SSH into the VM as the configured user; optionally run a
                       remote command (e.g. migrant ssh -- sudo cloud-init status)
+  tunnel [PORT...]    Open SSH local-forwards from host to VM. Without args,
+                      uses TUNNEL_PORTS from Migrantfile.
   console             Open a serial console session (exit with Ctrl+])
   ip                  Print the VM's IP address
   pubkey              Generate the managed SSH key if needed and print its public key
@@ -1633,6 +1635,7 @@ _migrant() {
     "mount:Mount the shared folder loop image for host-side access"
     "unmount:Unmount the shared folder loop image"
     "ssh:SSH into the VM; optionally run a remote command"
+    "tunnel:Open SSH local-forwards from host to VM"
     "console:Open a serial console session"
     "ip:Print the VM's IP address"
     "pubkey:Generate the managed SSH key if needed and print its public key"
@@ -2025,6 +2028,48 @@ cmd_ssh() {
   # through to the remote shell for expansion.
   # shellcheck disable=SC2029
   ssh "${ssh_opts[@]}" "${user}@${ip}" "$@"
+}
+
+cmd_tunnel() {
+  require_running
+  local user ssh_opts ip
+  resolve_ssh_conn user ssh_opts ip
+
+  local -a ports
+  if (( $# > 0 )); then
+    ports=("$@")
+  elif declare -p TUNNEL_PORTS &>/dev/null && (( ${#TUNNEL_PORTS[@]} > 0 )); then
+    ports=("${TUNNEL_PORTS[@]}")
+  else
+    echo "[ERROR] no ports to forward." >&2
+    echo "  Pass ports as args (e.g. 'migrant tunnel 3000 5432')," >&2
+    echo "  or set TUNNEL_PORTS in Migrantfile." >&2
+    exit 64
+  fi
+
+  local -a forwards
+  local p
+  for p in "${ports[@]}"; do
+    if ! [[ "$p" =~ ^[0-9]+$ ]] || (( p < 1 || p > 65535 )); then
+      echo "[ERROR] invalid port: $p" >&2
+      exit 64
+    fi
+    forwards+=("-L" "${p}:127.0.0.1:${p}")
+  done
+
+  ssh_opts+=(
+    -o ServerAliveInterval=30
+    -o ServerAliveCountMax=3
+    -o ExitOnForwardFailure=yes
+  )
+
+  printf "→ Tunneling %s → %s@%s\n\n" "${ports[*]}" "$user" "$ip"
+  for p in "${ports[@]}"; do
+    printf "    127.0.0.1:%-6s ⇄  VM:%s\n" "$p" "$p"
+  done
+  printf "\n  Ctrl-C to disconnect.\n\n"
+
+  exec ssh -N -T "${ssh_opts[@]}" "${forwards[@]}" "${user}@${ip}"
 }
 
 cmd_provision() {
@@ -2464,6 +2509,7 @@ case "$SUBCOMMAND" in
   destroy)      require_config; cmd_destroy ;;
   console)      require_config; cmd_console ;;
   ssh)          require_config; cmd_ssh "${@:2}" ;;
+  tunnel)       require_config; cmd_tunnel "${@:2}" ;;
   pubkey)       require_config; cmd_pubkey ;;
   ip)           require_config; cmd_ip ;;
   tz)           require_config; cmd_tz "${2:-}" ;;
