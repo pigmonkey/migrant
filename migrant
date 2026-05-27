@@ -2052,13 +2052,13 @@ cmd_tunnel() {
   fi
 
   local -a forwards
-  local p
-  for p in "${ports[@]}"; do
-    if ! is_valid_port "$p"; then
-      echo "[ERROR] invalid port: $p" >&2
+  local port
+  for port in "${ports[@]}"; do
+    if ! is_valid_port "$port"; then
+      echo "[ERROR] invalid port: $port" >&2
       exit 64
     fi
-    forwards+=("-L" "${p}:127.0.0.1:${p}")
+    forwards+=("-L" "${port}:127.0.0.1:${port}")
   done
 
   ssh_opts+=(
@@ -2070,8 +2070,8 @@ cmd_tunnel() {
   )
 
   printf "Tunneling %s -> %s@%s\n\n" "${ports[*]}" "$user" "$ip"
-  for p in "${ports[@]}"; do
-    printf "    127.0.0.1:%-6s <-> VM:%s\n" "$p" "$p"
+  for port in "${ports[@]}"; do
+    printf "    127.0.0.1:%-6s <-> VM:%s\n" "$port" "$port"
   done
   printf "\n  Ctrl-C to disconnect.\n\n"
 
