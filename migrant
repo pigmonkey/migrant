@@ -2065,9 +2065,9 @@ cmd_tunnel() {
     -o ExitOnForwardFailure=yes
   )
 
-  printf "→ Tunneling %s → %s@%s\n\n" "${ports[*]}" "$user" "$ip"
+  printf "Tunneling %s -> %s@%s\n\n" "${ports[*]}" "$user" "$ip"
   for p in "${ports[@]}"; do
-    printf "    127.0.0.1:%-6s ⇄  VM:%s\n" "$p" "$p"
+    printf "    127.0.0.1:%-6s <-> VM:%s\n" "$p" "$p"
   done
   printf "\n  Ctrl-C to disconnect.\n\n"
 
