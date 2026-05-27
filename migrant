@@ -2058,6 +2058,8 @@ cmd_tunnel() {
   done
 
   ssh_opts+=(
+    -o ConnectTimeout=10
+    -o BatchMode=yes
     -o ServerAliveInterval=30
     -o ServerAliveCountMax=3
     -o ExitOnForwardFailure=yes
