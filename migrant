@@ -340,6 +340,10 @@ wg_iface_and_table() {
   wg_table=$(( 16#$(printf '%s' "$1" | md5sum | head -c7) ))
 }
 
+is_valid_port() {
+  [[ "$1" =~ ^[0-9]+$ ]] && (( $1 >= 1 && $1 <= 65535 ))
+}
+
 sync_managed_config() {
   # Write all behavioral config to /etc/migrant/${VM_NAME}/ for the qemu and
   # loop hooks to consume. The directory is created only when at least one
@@ -398,7 +402,7 @@ sync_managed_config() {
       case "$rule" in
         allow-host-port\ tcp/*|allow-host-port\ udp/*)
           local port="${rule##*/}"
-          if ! [[ "$port" =~ ^[0-9]+$ ]] || (( port < 1 || port > 65535 )); then
+          if ! is_valid_port "$port"; then
             echo "[ERROR] invalid HOST_ACCESS entry: $rule" >&2
             echo "  allow-host-port requires a port number between 1 and 65535." >&2
             exit 65  # EX_DATAERR
@@ -2050,7 +2054,7 @@ cmd_tunnel() {
   local -a forwards
   local p
   for p in "${ports[@]}"; do
-    if ! [[ "$p" =~ ^[0-9]+$ ]] || (( p < 1 || p > 65535 )); then
+    if ! is_valid_port "$p"; then
       echo "[ERROR] invalid port: $p" >&2
       exit 64
     fi
