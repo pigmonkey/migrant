@@ -22,6 +22,9 @@ careful consideration. Key containment properties to preserve:
 
 - Run `shellcheck migrant` after every change — must be clean
 - Run `uvx ansible-lint arch/playbook.yml ubuntu/playbook.yml debian/playbook.yml` after changes to any playbook
+- There is no CI. Run `nix flake check` before pushing Nix or setup/hook changes
+  — it builds the package, runs the CLI closure guard, and boots the module
+  nixosTest (setup, doctor, and full teardown).
 - The script uses `set -euo pipefail`; follow these patterns:
   - Empty array expansion: `"${ARRAY[@]+"${ARRAY[@]}"}"`
   - Arithmetic that may evaluate to 0: `(( expr )) || true`
@@ -147,8 +150,37 @@ When adding a new feature that requires privileged enforcement:
 1. Add the Migrantfile variable and validation to `sync_managed_config()`
 2. Write the validated data to `/etc/migrant/${VM_NAME}/`
 3. Read it in the appropriate hook (`apply_rules`, `remove_rules`, etc.)
+4. Mirror any host-setup step in `nix/module.nix` and the NixOS doctor — `cmd_setup`
+   and the module are parallel implementations kept in parity.
+5. Add any new hook/CLI command to `hookPath` or `runtimeDeps` respectively.
 
 ## Target platform
 
 Primary target is Arch Linux with the `linux-hardened` kernel. Other Linux
 distros are supported but secondary.
+
+## NixOS host support
+
+Running migrant *on* a NixOS host (distinct from the `nixos/` guest) is
+declarative: `flake.nix` ships the wrapped package, `nixosModules.default`
+(`nix/module.nix`), and a `checks.<system>.module` nixosTest. The module
+reproduces every `cmd_setup` responsibility as system config. When changing it:
+
+- **Assets are single-sourced.** Hooks, ZSH completion, and the network XML come
+  from the `emit_*` functions via the `export` subcommand; the Nix package
+  stages them at build time. Edit a hook's `emit_*` function — never copy a body
+  into `nix/module.nix`; wrap the packaged asset instead.
+- **Hook dir is platform-dependent.** NixOS dispatches from `/var/lib/libvirt/hooks`
+  (not `/etc/libvirt/hooks`) and wipes anything not registered via
+  `virtualisation.libvirtd.hooks`. The module registers there; readers use
+  `hooks_dir()` to match.
+- **`cmd_setup` is a read-only doctor on NixOS** (`is_nixos()`): no sudo, just
+  verifies the module applied; `EX_CONFIG` on a missing prerequisite.
+- **`hookPath` must cover every command the hooks call** (a miss fails only at
+  hook runtime; the nixosTest's teardown coverage catches it).
+- **Firewall backend is intentionally unset** (`cmd_setup` only overrides it on
+  legacy-iptables hosts).
+- **Reverse-path filtering must be loose.** NixOS's default strict `-m rpfilter
+  --validmark` (mangle PREROUTING) drops WireGuard replies, which arrive unmarked
+  on a tunnel reachable only from the VM's fwmark table. The per-interface
+  `rp_filter` sysctl the hook sets does not affect the netfilter match.

@@ -3,3 +3,6 @@
 **/workspace/
 **/.listener*.pid
 .worktrees/
+/result
+.ansible/
+*-swtpm/

@@ -33,6 +33,8 @@ Usage: migrant <command> [args]
 Setup:
   setup               One-time host setup: configures libvirt networking and
                       installs firewall hooks
+  export <dir>        Write the libvirt hooks, completion, and network XML into
+                      <dir>
 
 Lifecycle:
   up                  Create the VM if it does not exist, or start it if stopped;
@@ -299,7 +301,8 @@ verify_shared_folder_mounts() {
 
 ensure_shared_folder_images() {
   shared_folder_isolation_enabled || return 0
-  local loop_hook="/etc/libvirt/hooks/qemu.d/migrant-loop"
+  local loop_hook
+  loop_hook="$(hooks_dir)/qemu.d/migrant-loop"
   if [[ ! -f "$loop_hook" ]]; then
     echo "[ERROR] shared folder isolation is enabled but the loop image hook is not installed." >&2
     echo "  Run 'migrant setup' first, then re-run this command." >&2
@@ -874,111 +877,12 @@ install_hook() {
   sudo chmod 755 "$dest"
 }
 
-cmd_setup() {
-  local qemu_hook="/etc/libvirt/hooks/qemu.d/migrant"
-  local network_hook="/etc/libvirt/hooks/network.d/migrant"
-
-  # All temp files are created upfront so a single trap covers them.
-  # SC2064: expand now — these vars are local and will be out of scope on EXIT
-  local expected_qemu_hook expected_network_hook net_xml expected_loop_hook expected_zsh_completion
-  expected_qemu_hook=$(mktemp)
-  expected_network_hook=$(mktemp)
-  net_xml=$(mktemp --suffix=.xml)
-  expected_loop_hook=$(mktemp)
-  expected_zsh_completion=$(mktemp)
-  # shellcheck disable=SC2064
-  trap "rm -f '$expected_qemu_hook' '$expected_network_hook' '$net_xml' '$expected_loop_hook' '$expected_zsh_completion'" EXIT
-
-  local kw=21   # key column width
-  local skw=19  # sub-field key column width (kw - 2 for the indent)
-  local changes=0
-
-  # --- KVM check ---
-  check_kvm
-
-  echo "Setup requires elevated permissions to install hooks and configure services."
-  sudo -v
-  echo ""
-
-  # --- libvirtd sockets ---
-  local unit_actions
-  for unit in libvirtd.socket virtlogd.socket; do
-    unit_actions=""
-    if ! systemctl is-enabled --quiet "$unit" 2>/dev/null; then
-      sudo systemctl enable "$unit"
-      unit_actions="enabled"
-    fi
-    if ! systemctl is-active --quiet "$unit" 2>/dev/null; then
-      sudo systemctl start "$unit"
-      unit_actions="${unit_actions:+${unit_actions}, }started"
-    fi
-    if [[ -n "$unit_actions" ]]; then
-      printf '%-*s%s\n' "$kw" "${unit}:" "${unit_actions} [changed]"
-      (( changes++ )) || true
-    else
-      printf '%-*s%s\n' "$kw" "${unit}:" "ok"
-    fi
-  done
-
-  # --- libvirt group ---
-  local current_user
-  current_user=$(whoami)
-  if groups "$current_user" | grep -qw libvirt; then
-    printf '%-*s%s\n' "$kw" "libvirt group:" "ok"
-  else
-    sudo usermod -aG libvirt "$current_user"
-    printf '%-*s%s\n' "$kw" "libvirt group:" "added [changed]"
-    printf '  %-*s%s\n' "$skw" "note:" "log out and back in (or run 'newgrp libvirt')"
-    (( changes++ )) || true
-  fi
-
-  # --- /etc/migrant/ (managed config directory) ---
-  if [[ ! -d /etc/migrant ]]; then
-    sudo mkdir -p /etc/migrant
-    sudo chown root:libvirt /etc/migrant
-    sudo chmod 2770 /etc/migrant
-    printf '%-*s%s\n' "$kw" "/etc/migrant:" "created [changed]"
-    (( changes++ )) || true
-  elif [[ "$(stat -c '%G' /etc/migrant)" != "libvirt" \
-       || "$(stat -c '%a' /etc/migrant)" != "2770" ]]; then
-    sudo chown root:libvirt /etc/migrant
-    sudo chmod 2770 /etc/migrant
-    printf '%-*s%s\n' "$kw" "/etc/migrant:" "permissions updated [changed]"
-    (( changes++ )) || true
-  else
-    printf '%-*s%s\n' "$kw" "/etc/migrant:" "ok"
-  fi
-
-  # --- firewall backend ---
-  local network_conf="/etc/libvirt/network.conf"
-  local current_backend
-  current_backend=$(grep -oP '(?<=^firewall_backend = ")[^"]+' "$network_conf" 2>/dev/null || echo "")
-  if [[ -z "$current_backend" ]]; then
-    current_backend="nftables"  # libvirt default
-  fi
-
-  # Detect which firewall system the host actually uses:
-  # - Legacy iptables: has rules in iptables but not in nft
-  # - nftables: nft list ruleset shows tables (ignore libvirt's own)
-  local host_uses_legacy_iptables=false
-  if sudo iptables -S 2>/dev/null | grep -qv '^-P .* ACCEPT$' \
-      && ! sudo nft list ruleset 2>/dev/null | grep -q 'table'; then
-    host_uses_legacy_iptables=true
-  fi
-
-  if $host_uses_legacy_iptables && [[ "$current_backend" != "iptables" ]]; then
-    sudo sed -i 's/#\?\s*firewall_backend\s*=\s*"[^"]*"/firewall_backend = "iptables"/' \
-      "$network_conf" 2>/dev/null \
-      || echo 'firewall_backend = "iptables"' | sudo tee -a "$network_conf" > /dev/null
-    sudo systemctl restart libvirtd
-    printf '%-*s%s\n' "$kw" "firewall backend:" "switched to iptables [changed]"
-    (( changes++ )) || true
-  else
-    printf '%-*s%s\n' "$kw" "firewall backend:" "$current_backend"
-  fi
-
-  # --- qemu hook (network isolation + WireGuard) ---
-  cat > "$expected_qemu_hook" << 'MIGRANT_QEMU_EOF'
+# --- Managed-asset emitters (single source of truth for hooks, completion,
+# and the migrant network XML; consumed by cmd_setup and by packaging via
+# the 'export' subcommand). Bodies are byte-identical to what these
+# artifacts must be on disk. ---
+emit_hook_qemu() {
+  cat <<'MIGRANT_QEMU_EOF'
 #!/bin/bash
 # Managed by migrant
 set -euo pipefail
@@ -1580,20 +1484,10 @@ case "$OPERATION" in
   release) remove_rules   "$VM_NAME" ;; # wg_teardown if WG; defensive MAC cleanup
 esac
 MIGRANT_QEMU_EOF
-  if [[ -f "$qemu_hook" ]] && cmp -s "$expected_qemu_hook" "$qemu_hook"; then
-    printf '%-*s%s\n' "$kw" "qemu hook:" "ok"
-  else
-    local qemu_hook_verb="installed"
-    [[ -f "$qemu_hook" ]] && qemu_hook_verb="reinstalled"
-    install_hook "$expected_qemu_hook" "$qemu_hook"
-    printf '%-*s%s\n' "$kw" "qemu hook:" "${qemu_hook_verb} [changed]"
-    (( changes++ )) || true
-  fi
+}
 
-  # --- qemu hook (loop image mount/unmount) ---
-  local loop_hook="/etc/libvirt/hooks/qemu.d/migrant-loop"
-
-  cat > "$expected_loop_hook" << 'MIGRANT_LOOP_EOF'
+emit_hook_loop() {
+  cat <<'MIGRANT_LOOP_EOF'
 #!/bin/bash
 # Managed by migrant
 
@@ -1701,25 +1595,10 @@ case "$OPERATION" in
   release) unmount_shared_folders ;;
 esac
 MIGRANT_LOOP_EOF
-  if [[ -f "$loop_hook" ]] && cmp -s "$expected_loop_hook" "$loop_hook"; then
-    printf '%-*s%s\n' "$kw" "loop hook:" "ok"
-  else
-    local loop_hook_verb="installed"
-    [[ -f "$loop_hook" ]] && loop_hook_verb="reinstalled"
-    install_hook "$expected_loop_hook" "$loop_hook"
-    printf '%-*s%s\n' "$kw" "loop hook:" "${loop_hook_verb} [changed]"
-    (( changes++ )) || true
-  fi
+}
 
-  # --- network hook (rp_filter) ---
-  local default_rp_filter
-  default_rp_filter=$(cat /proc/sys/net/ipv4/conf/default/rp_filter 2>/dev/null \
-    || echo 0)
-
-  if [[ "$default_rp_filter" -eq 0 ]]; then
-    printf '%-*s%s\n' "$kw" "rp_filter hook:" "skipped (rp_filter=0)"
-  else
-    cat > "$expected_network_hook" << 'MIGRANT_NETWORK_EOF'
+emit_hook_network() {
+  cat <<'MIGRANT_NETWORK_EOF'
 #!/bin/bash
 # Managed by migrant
 # Libvirt network hook args: $1=network-name $2=operation $3=sub-operation $4=extra
@@ -1727,22 +1606,10 @@ if [[ "$1" == "migrant" && "$2" == "started" ]]; then
   sysctl -w "net.ipv4.conf.virbr-migrant.rp_filter=0"
 fi
 MIGRANT_NETWORK_EOF
-    if [[ -f "$network_hook" ]] && cmp -s "$expected_network_hook" "$network_hook"; then
-      printf '%-*s%s\n' "$kw" "rp_filter hook:" "ok"
-    else
-      local rp_hook_verb="installed"
-      [[ -f "$network_hook" ]] && rp_hook_verb="reinstalled"
-      install_hook "$expected_network_hook" "$network_hook"
-      printf '%-*s%s\n' "$kw" "rp_filter hook:" "${rp_hook_verb} [changed]"
-      (( changes++ )) || true
-    fi
-  fi
+}
 
-  # --- migrant network ---
-  if virsh net-info migrant &>/dev/null; then
-    printf '%-*s%s\n' "$kw" "migrant network:" "ok"
-  else
-    cat > "$net_xml" << 'NET_EOF'
+emit_network_xml() {
+  cat <<'NET_EOF'
 <network>
   <name>migrant</name>
   <forward mode="nat"/>
@@ -1768,38 +1635,17 @@ MIGRANT_NETWORK_EOF
   </ip>
 </network>
 NET_EOF
-    virsh net-define "$net_xml"
-    printf '%-*s%s\n' "$kw" "migrant network:" "created [changed]"
-    (( changes++ )) || true
-  fi
+}
 
-  # --- images directory permissions ---
-  local images_dir_action=""
-  if [[ ! -d "$IMAGES_DIR" ]]; then
-    sudo mkdir -p "$IMAGES_DIR"
-    images_dir_action="created"
-  fi
-  if [[ ! -w "$IMAGES_DIR" ]]; then
-    sudo chown root:libvirt "$IMAGES_DIR"
-    sudo chmod g+rwx "$IMAGES_DIR"
-    images_dir_action="${images_dir_action:+${images_dir_action}, }permissions updated"
-  fi
-  if [[ -n "$images_dir_action" ]]; then
-    printf '%-*s%s\n' "$kw" "images dir:" "${images_dir_action} [changed]"
-    (( changes++ )) || true
-  else
-    printf '%-*s%s\n' "$kw" "images dir:" "ok"
-  fi
-
-  # --- ZSH completions ---
-  if [[ -d "$ZSH_SITE_FUNCTIONS" ]]; then
-    cat > "$expected_zsh_completion" << 'MIGRANT_ZSH_EOF'
+emit_completion() {
+  cat <<'MIGRANT_ZSH_EOF'
 #compdef migrant
 
 _migrant() {
   local -a subcommands
   subcommands=(
     "setup:One-time host setup: configures libvirt networking and installs firewall hooks"
+    "export:Write the libvirt hooks, completion, and network XML into a directory"
     "up:Create the VM if it does not exist, or start it if stopped"
     "halt:Gracefully shut down the VM"
     "destroy:Stop and permanently delete the VM, its disk, and any snapshots"
@@ -1832,6 +1678,308 @@ _migrant() {
 
 _migrant "$@"
 MIGRANT_ZSH_EOF
+}
+
+emit_assets() {
+  local dir="$1"
+  mkdir -p "$dir/hooks/qemu.d" "$dir/hooks/network.d" "$dir/completion"
+  emit_hook_qemu    > "$dir/hooks/qemu.d/migrant"
+  emit_hook_loop    > "$dir/hooks/qemu.d/migrant-loop"
+  emit_hook_network > "$dir/hooks/network.d/migrant"
+  emit_completion   > "$dir/completion/_migrant"
+  emit_network_xml  > "$dir/network.xml"
+  chmod 755 "$dir/hooks/qemu.d/migrant" "$dir/hooks/qemu.d/migrant-loop" "$dir/hooks/network.d/migrant"
+  chmod 644 "$dir/completion/_migrant" "$dir/network.xml"
+}
+
+is_nixos() {
+  # /etc/NIXOS is the canonical NixOS marker; os-release ID is the fallback.
+  [[ -f /etc/NIXOS ]] || grep -q '^ID=nixos$' /etc/os-release 2>/dev/null
+}
+
+hooks_dir() {
+  # Stock libvirt (Arch et al.) reads /etc/libvirt/hooks; NixOS reads
+  # /var/lib/libvirt/hooks. Readers must look where libvirt actually dispatches.
+  if is_nixos; then echo "/var/lib/libvirt/hooks"; else echo "/etc/libvirt/hooks"; fi
+}
+
+cmd_setup_nixos_doctor() {
+  # The NixOS module owns privileged setup, so this must not sudo — it only
+  # verifies the module's artifacts. Missing prerequisites are fatal (EX_CONFIG);
+  # host-hardware gaps (KVM) and recoverable states are warnings.
+  local kw=21 skw=19 problems=0 warnings=0
+  echo "NixOS host detected — privileged setup is managed by the migrant NixOS module."
+  echo "This command only verifies the module was applied (it makes no changes)."
+  echo ""
+  _row()  { printf '%-*s%s\n' "$kw" "$1" "$2"; }
+  _sub()  { printf '  %-*s%s\n' "$skw" "$1" "$2"; }
+  _fail() { (( problems++ )) || true; }
+  _warn() { (( warnings++ )) || true; }
+
+  # KVM — WARNING not fatal: it is host hardware the module cannot provide, and
+  # a NixOS-test/CI builder legitimately runs under TCG without /dev/kvm.
+  if [[ -r /dev/kvm ]]; then _row "kvm:" "ok"
+  else _row "kvm:" "unavailable [WARNING]"; _sub "note:" "VMs cannot run without KVM (normal in nested/CI builders)"; _warn; fi
+
+  # libvirtd + virtlogd
+  local u
+  for u in libvirtd virtlogd; do
+    if systemctl is-active --quiet "$u.socket" 2>/dev/null || systemctl is-active --quiet "$u.service" 2>/dev/null; then
+      _row "$u:" "active"
+    else _row "$u:" "NOT ACTIVE [ERROR]"; _fail; fi
+  done
+
+  # libvirt group — check PROCESS creds, not the account DB
+  if id -nG | grep -qw libvirt; then _row "libvirt group:" "ok"
+  else _row "libvirt group:" "MISSING [ERROR]"
+       _sub "hint:" "add your user to virtualisation.migrant.users, then re-login"; _fail; fi
+
+  # /etc/migrant
+  if [[ -d /etc/migrant && "$(stat -c '%G' /etc/migrant)" == libvirt && "$(stat -c '%a' /etc/migrant)" == 2770 ]]; then
+    _row "/etc/migrant:" "ok"; else _row "/etc/migrant:" "MISSING/wrong perms [ERROR]"; _fail; fi
+
+  # images dir — verify owner:group:mode AND writability (parity: root:libvirt 0775)
+  if [[ -d /var/lib/libvirt/images && "$(stat -c '%G' /var/lib/libvirt/images)" == libvirt \
+        && "$(stat -c '%a' /var/lib/libvirt/images)" == 775 && -w /var/lib/libvirt/images ]]; then
+    _row "images dir:" "ok"
+  else _row "images dir:" "MISSING/wrong perms [ERROR]"; _fail; fi
+
+  # hooks — must be executable (an empty/non-exec file at the path is not enough)
+  local h hdir
+  hdir=$(hooks_dir)
+  for h in qemu.d/migrant qemu.d/migrant-loop network.d/migrant; do
+    if [[ -x "$hdir/$h" ]]; then _row "hook ${h}:" "installed"
+    else _row "hook ${h}:" "MISSING/not executable [ERROR]"; _fail; fi
+  done
+
+  # command closure — the wrapped migrant must resolve everything lifecycle needs
+  local c
+  for c in virsh virt-install qemu-img mkfs.ext4 xorriso wg; do
+    if command -v "$c" >/dev/null 2>&1; then _row "cmd ${c}:" "ok"
+    else _row "cmd ${c}:" "MISSING [ERROR]"; _fail; fi
+  done
+
+  # virtiofsd — libvirt spawns it for shared folders (wired by the module's
+  # vhost-user descriptors); without it a shared-folder VM fails to start.
+  local vhu vhu_found=false
+  for vhu in /var/lib/qemu/vhost-user/*virtiofsd* /run/libvirt/qemu/vhost-user/*virtiofsd*; do
+    [[ -e "$vhu" ]] && { vhu_found=true; break; }
+  done
+  if [[ "$vhu_found" == true ]]; then
+    _row "virtiofsd:" "ok"
+  else
+    _row "virtiofsd:" "not wired [WARNING]"
+    _sub "hint:" "shared folders need virtualisation.libvirtd.qemu.vhostUserPackages"
+    _warn
+  fi
+
+  # migrant network (needs group; if group missing this may read as unknown)
+  if virsh net-info migrant >/dev/null 2>&1; then
+    if virsh net-list --name 2>/dev/null | grep -qx migrant; then _row "migrant network:" "active"
+    else _row "migrant network:" "defined, not active [WARNING]"; _sub "hint:" "systemctl restart migrant-network"; _warn; fi
+    # A network defined before the IPv6 ULA was added is kept as-is (the service
+    # doesn't redefine existing nets), so NETWORK_IPV6=nat would be silently off.
+    if ! virsh net-dumpxml migrant 2>/dev/null | grep -q 'fdca:6d16:2b1a'; then
+      _sub "note:" "network predates IPv6 ULA — recreate it to use NETWORK_IPV6=nat"; _warn
+    fi
+  else _row "migrant network:" "NOT DEFINED [ERROR]"; _sub "hint:" "systemctl restart migrant-network"; _fail; fi
+
+  # firewall backend — INFORMATIONAL only, never fatal
+  local backend
+  backend=$(grep -oP '(?<=^\s*firewall_backend\s=\s")[^"]+' /etc/libvirt/network.conf 2>/dev/null | head -1 || true)
+  _row "firewall backend:" "${backend:-default (libvirt-selected)}"
+
+  echo ""
+  if (( problems > 0 )); then
+    echo "$problems problem(s). Enable 'virtualisation.migrant.enable = true' (and add your user) then rebuild." >&2
+    exit 78
+  fi
+  if (( warnings > 0 )); then echo "Host prerequisites satisfied ($warnings warning(s) — see above)."
+  else echo "All migrant host prerequisites satisfied."; fi
+}
+
+cmd_setup() {
+  if is_nixos; then cmd_setup_nixos_doctor; return; fi
+
+  local qemu_hook="/etc/libvirt/hooks/qemu.d/migrant"
+  local network_hook="/etc/libvirt/hooks/network.d/migrant"
+
+  # All temp files are created upfront so a single trap covers them.
+  # SC2064: expand now — these vars are local and will be out of scope on EXIT
+  local expected_qemu_hook expected_network_hook net_xml expected_loop_hook expected_zsh_completion
+  expected_qemu_hook=$(mktemp)
+  expected_network_hook=$(mktemp)
+  net_xml=$(mktemp --suffix=.xml)
+  expected_loop_hook=$(mktemp)
+  expected_zsh_completion=$(mktemp)
+  # shellcheck disable=SC2064
+  trap "rm -f '$expected_qemu_hook' '$expected_network_hook' '$net_xml' '$expected_loop_hook' '$expected_zsh_completion'" EXIT
+
+  local kw=21   # key column width
+  local skw=19  # sub-field key column width (kw - 2 for the indent)
+  local changes=0
+
+  # --- KVM check ---
+  check_kvm
+
+  echo "Setup requires elevated permissions to install hooks and configure services."
+  sudo -v
+  echo ""
+
+  # --- libvirtd sockets ---
+  local unit_actions
+  for unit in libvirtd.socket virtlogd.socket; do
+    unit_actions=""
+    if ! systemctl is-enabled --quiet "$unit" 2>/dev/null; then
+      sudo systemctl enable "$unit"
+      unit_actions="enabled"
+    fi
+    if ! systemctl is-active --quiet "$unit" 2>/dev/null; then
+      sudo systemctl start "$unit"
+      unit_actions="${unit_actions:+${unit_actions}, }started"
+    fi
+    if [[ -n "$unit_actions" ]]; then
+      printf '%-*s%s\n' "$kw" "${unit}:" "${unit_actions} [changed]"
+      (( changes++ )) || true
+    else
+      printf '%-*s%s\n' "$kw" "${unit}:" "ok"
+    fi
+  done
+
+  # --- libvirt group ---
+  local current_user
+  current_user=$(whoami)
+  if groups "$current_user" | grep -qw libvirt; then
+    printf '%-*s%s\n' "$kw" "libvirt group:" "ok"
+  else
+    sudo usermod -aG libvirt "$current_user"
+    printf '%-*s%s\n' "$kw" "libvirt group:" "added [changed]"
+    printf '  %-*s%s\n' "$skw" "note:" "log out and back in (or run 'newgrp libvirt')"
+    (( changes++ )) || true
+  fi
+
+  # --- /etc/migrant/ (managed config directory) ---
+  if [[ ! -d /etc/migrant ]]; then
+    sudo mkdir -p /etc/migrant
+    sudo chown root:libvirt /etc/migrant
+    sudo chmod 2770 /etc/migrant
+    printf '%-*s%s\n' "$kw" "/etc/migrant:" "created [changed]"
+    (( changes++ )) || true
+  elif [[ "$(stat -c '%G' /etc/migrant)" != "libvirt" \
+       || "$(stat -c '%a' /etc/migrant)" != "2770" ]]; then
+    sudo chown root:libvirt /etc/migrant
+    sudo chmod 2770 /etc/migrant
+    printf '%-*s%s\n' "$kw" "/etc/migrant:" "permissions updated [changed]"
+    (( changes++ )) || true
+  else
+    printf '%-*s%s\n' "$kw" "/etc/migrant:" "ok"
+  fi
+
+  # --- firewall backend ---
+  local network_conf="/etc/libvirt/network.conf"
+  local current_backend
+  current_backend=$(grep -oP '(?<=^firewall_backend = ")[^"]+' "$network_conf" 2>/dev/null || echo "")
+  if [[ -z "$current_backend" ]]; then
+    current_backend="nftables"  # libvirt default
+  fi
+
+  # Detect which firewall system the host actually uses:
+  # - Legacy iptables: has rules in iptables but not in nft
+  # - nftables: nft list ruleset shows tables (ignore libvirt's own)
+  local host_uses_legacy_iptables=false
+  if sudo iptables -S 2>/dev/null | grep -qv '^-P .* ACCEPT$' \
+      && ! sudo nft list ruleset 2>/dev/null | grep -q 'table'; then
+    host_uses_legacy_iptables=true
+  fi
+
+  if $host_uses_legacy_iptables && [[ "$current_backend" != "iptables" ]]; then
+    sudo sed -i 's/#\?\s*firewall_backend\s*=\s*"[^"]*"/firewall_backend = "iptables"/' \
+      "$network_conf" 2>/dev/null \
+      || echo 'firewall_backend = "iptables"' | sudo tee -a "$network_conf" > /dev/null
+    sudo systemctl restart libvirtd
+    printf '%-*s%s\n' "$kw" "firewall backend:" "switched to iptables [changed]"
+    (( changes++ )) || true
+  else
+    printf '%-*s%s\n' "$kw" "firewall backend:" "$current_backend"
+  fi
+
+  # --- qemu hook (network isolation + WireGuard) ---
+  emit_hook_qemu > "$expected_qemu_hook"
+  if [[ -f "$qemu_hook" ]] && cmp -s "$expected_qemu_hook" "$qemu_hook"; then
+    printf '%-*s%s\n' "$kw" "qemu hook:" "ok"
+  else
+    local qemu_hook_verb="installed"
+    [[ -f "$qemu_hook" ]] && qemu_hook_verb="reinstalled"
+    install_hook "$expected_qemu_hook" "$qemu_hook"
+    printf '%-*s%s\n' "$kw" "qemu hook:" "${qemu_hook_verb} [changed]"
+    (( changes++ )) || true
+  fi
+
+  # --- qemu hook (loop image mount/unmount) ---
+  local loop_hook="/etc/libvirt/hooks/qemu.d/migrant-loop"
+
+  emit_hook_loop > "$expected_loop_hook"
+  if [[ -f "$loop_hook" ]] && cmp -s "$expected_loop_hook" "$loop_hook"; then
+    printf '%-*s%s\n' "$kw" "loop hook:" "ok"
+  else
+    local loop_hook_verb="installed"
+    [[ -f "$loop_hook" ]] && loop_hook_verb="reinstalled"
+    install_hook "$expected_loop_hook" "$loop_hook"
+    printf '%-*s%s\n' "$kw" "loop hook:" "${loop_hook_verb} [changed]"
+    (( changes++ )) || true
+  fi
+
+  # --- network hook (rp_filter) ---
+  local default_rp_filter
+  default_rp_filter=$(cat /proc/sys/net/ipv4/conf/default/rp_filter 2>/dev/null \
+    || echo 0)
+
+  if [[ "$default_rp_filter" -eq 0 ]]; then
+    printf '%-*s%s\n' "$kw" "rp_filter hook:" "skipped (rp_filter=0)"
+  else
+    emit_hook_network > "$expected_network_hook"
+    if [[ -f "$network_hook" ]] && cmp -s "$expected_network_hook" "$network_hook"; then
+      printf '%-*s%s\n' "$kw" "rp_filter hook:" "ok"
+    else
+      local rp_hook_verb="installed"
+      [[ -f "$network_hook" ]] && rp_hook_verb="reinstalled"
+      install_hook "$expected_network_hook" "$network_hook"
+      printf '%-*s%s\n' "$kw" "rp_filter hook:" "${rp_hook_verb} [changed]"
+      (( changes++ )) || true
+    fi
+  fi
+
+  # --- migrant network ---
+  if virsh net-info migrant &>/dev/null; then
+    printf '%-*s%s\n' "$kw" "migrant network:" "ok"
+  else
+    emit_network_xml > "$net_xml"
+    virsh net-define "$net_xml"
+    printf '%-*s%s\n' "$kw" "migrant network:" "created [changed]"
+    (( changes++ )) || true
+  fi
+
+  # --- images directory permissions ---
+  local images_dir_action=""
+  if [[ ! -d "$IMAGES_DIR" ]]; then
+    sudo mkdir -p "$IMAGES_DIR"
+    images_dir_action="created"
+  fi
+  if [[ ! -w "$IMAGES_DIR" ]]; then
+    sudo chown root:libvirt "$IMAGES_DIR"
+    sudo chmod g+rwx "$IMAGES_DIR"
+    images_dir_action="${images_dir_action:+${images_dir_action}, }permissions updated"
+  fi
+  if [[ -n "$images_dir_action" ]]; then
+    printf '%-*s%s\n' "$kw" "images dir:" "${images_dir_action} [changed]"
+    (( changes++ )) || true
+  else
+    printf '%-*s%s\n' "$kw" "images dir:" "ok"
+  fi
+
+  # --- ZSH completions ---
+  if [[ -d "$ZSH_SITE_FUNCTIONS" ]]; then
+    emit_completion > "$expected_zsh_completion"
 
     local zsh_completion_dest="$ZSH_SITE_FUNCTIONS/_migrant"
     if [[ -f "$zsh_completion_dest" ]] && cmp -s "$expected_zsh_completion" "$zsh_completion_dest"; then
@@ -2276,8 +2424,14 @@ cmd_tz() {
   require_running
   local tz="${1:-}"
   if [[ -z "$tz" ]]; then
-    tz=$(readlink /etc/localtime || true)
-    tz=${tz#/usr/share/zoneinfo/}
+    # Resolve fully and strip up to the final .../zoneinfo/ segment. This works
+    # across distros: /usr/share/zoneinfo (Arch et al.), a relative symlink, and
+    # NixOS's /etc/localtime -> tzdata store path under .../share/zoneinfo/.
+    tz=$(readlink -f /etc/localtime || true)
+    tz=${tz##*/zoneinfo/}
+    # No zoneinfo segment means /etc/localtime is missing — NixOS omits it until
+    # time.timeZone is set, and readlink then echoes the path back. Ask systemd.
+    [[ "$tz" == /* ]] && tz=$(timedatectl show -p Timezone --value 2>/dev/null || true)
   fi
   if [[ -z "$tz" ]]; then
     echo "[ERROR] Could not determine host timezone." >&2
@@ -2792,6 +2946,8 @@ cmd_storage() {
 
 case "$SUBCOMMAND" in
   setup)        cmd_setup ;;
+  export)       [[ $# -eq 2 ]] || { echo "usage: migrant export <dir>" >&2; exit 64; }
+                emit_assets "$2" ;;
   up)           require_config; cmd_up ;;
   halt)         require_config; cmd_halt ;;
   destroy)      require_config; cmd_destroy ;;

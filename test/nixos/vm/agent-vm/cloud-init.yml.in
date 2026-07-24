@@ -1,0 +1,21 @@
+#cloud-config
+# The `agent-up` helper fills in the key placeholder below with the managed key.
+users:
+  - name: migrant
+    groups: [wheel]
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    shell: /bin/bash
+    lock_passwd: false
+    plain_text_passwd: "migrant"
+    ssh_authorized_keys:
+      - SSH_PLACEHOLDER
+
+package_update: true
+packages:
+  - python3
+  - uv
+
+runcmd:
+  - mkdir -p /home/migrant/workspace
+  - mount -t virtiofs workspace /home/migrant/workspace
+  - chown -R migrant:migrant /home/migrant

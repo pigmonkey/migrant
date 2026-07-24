@@ -1,0 +1,19 @@
+# Minimal agent VM for the NixOS test VM (flake.nix `test-vm`). No Ansible —
+# cloud-init only, so `migrant up` is quick. Network isolation is on by default.
+VM_NAME="agent"
+OS_VARIANT="archlinux"
+RAM_MB=2048
+VCPUS=2
+DISK_GB=10
+# Reused from the host's libvirt image cache via the test VM's 9p share (see
+# host.nix sharedDirectories.hostImages) — no download inside the guest.
+IMAGE_URL="file:///mnt/host-images/Arch-Linux-x86_64-cloudimg.qcow2"
+SHARED_FOLDERS=(
+  "workspace:workspace"
+)
+NETWORKS=(
+  "network=migrant"
+)
+SHARED_FOLDER_SIZE_GB=2
+NETWORK_IPV6=off
+AUTOCONNECT=ssh

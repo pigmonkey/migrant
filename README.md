@@ -193,6 +193,78 @@ section for the drop-in configuration.
 
 ---
 
+## Installation (NixOS)
+
+On NixOS the host setup is declarative rather than imperative: instead of
+installing dependencies and running `migrant setup`, you add migrant's flake and
+enable its NixOS module. The module does everything `migrant setup` does on other
+distros — but reproducibly, as part of your system configuration.
+
+### 1. Add the flake and enable the module
+
+```nix
+# flake.nix
+{
+  inputs.migrant.url = "github:pigmonkey/migrant";
+
+  outputs = { self, nixpkgs, migrant, ... }: {
+    nixosConfigurations.yourhost = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        migrant.nixosModules.default
+        {
+          virtualisation.migrant.enable = true;
+          virtualisation.migrant.users = [ "youruser" ];
+        }
+      ];
+    };
+  };
+}
+```
+
+Then rebuild:
+
+```bash
+sudo nixos-rebuild switch
+```
+
+The module installs the `migrant` command, enables libvirtd and QEMU/KVM, adds
+your user to the `libvirt` group, creates `/etc/migrant/` and the images
+directory with the right ownership, installs the libvirt hooks (into
+`/var/lib/libvirt/hooks/`, where NixOS's libvirt dispatches them), and defines
+and autostarts the `migrant` NAT network. Log out and back in after the first
+rebuild so your shell picks up the `libvirt` group.
+
+### 2. Verify with the doctor
+
+On NixOS, `migrant setup` does **not** modify the host — the module already did
+that. Instead it runs as a read-only doctor that verifies every prerequisite and
+makes no changes (and never uses `sudo`):
+
+```bash
+migrant setup
+```
+
+It checks libvirtd/virtlogd, group membership, `/etc/migrant`, the images
+directory, the hooks, key commands, virtiofsd, and the `migrant` network. A
+missing module-provided prerequisite is fatal (non-zero exit); host-hardware or
+degraded conditions — no KVM (as with `migrant setup` on other distros), a
+network that predates the IPv6 subnet, virtiofsd not wired — are warnings.
+
+### Notes
+
+- The module targets NixOS's default firewall and leaves libvirt's
+  `firewall_backend` unset, as `migrant setup` does on other hosts.
+- The module sets `networking.firewall.checkReversePath = "loose"`. NixOS's
+  default (strict) drops the replies returning down a VM's WireGuard tunnel,
+  because migrant routes that traffic through a per-VM fwmark table.
+- For parity with the primary target (Arch + `linux-hardened`), consider
+  `boot.kernelPackages = pkgs.linuxPackages_hardened`.
+- `nix develop` provides `shellcheck`, `ansible-lint`, and the runtime tools for
+  working on migrant itself.
+
+---
+
 ## Example: Claude Code agent VMs
 
 The `arch/`, `ubuntu/`, and `debian/` subdirectories contain ready-to-use
@@ -234,6 +306,7 @@ Run commands from the project directory containing `Migrantfile`, or set
 ```bash
 # Setup
 migrant setup              # One-time host setup: configures libvirt networking and installs firewall hooks
+migrant export <dir>       # Write the libvirt hooks, completion, and network XML into <dir>
 
 # Lifecycle
 migrant up                 # Create the VM if it does not exist, or start it if stopped; runs Ansible provisioning (if playbook.yml exists) on first create; waits until the VM is fully ready; connects automatically if AUTOCONNECT is set in the Migrantfile
