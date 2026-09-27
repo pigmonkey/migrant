@@ -186,15 +186,17 @@ vm_block_mac() {
   # The 'prerouting' hook catches all bridge traffic regardless of path.
   #
   # Infrastructure (table, set, chain, drop rule) is shared across VMs.
-  # 'add' is idempotent on table and set; the chain add returns non-zero if it
-  # already exists, which is used to gate the one-time rule insertion.
+  # 'add' is idempotent on all three, so it cannot tell a first start apart.
   nft add table bridge migrant 2>/dev/null || true
   nft add set bridge migrant blocked_macs \
     '{ type ether_addr ; }' 2>/dev/null || true
-  if nft add chain bridge migrant prerouting \
-      '{ type filter hook prerouting priority -200 ; policy accept ; }' 2>/dev/null; then
-    nft add rule bridge migrant prerouting ether saddr @blocked_macs drop
-  fi
+  # One transaction, so a concurrent hook can neither skip nor duplicate the
+  # rule. The flush also collapses copies an older hook appended.
+  nft -f - <<'NFT'
+add chain bridge migrant prerouting { type filter hook prerouting priority -200 ; policy accept ; }
+flush chain bridge migrant prerouting
+add rule bridge migrant prerouting ether saddr @blocked_macs drop
+NFT
 
   # Remove any stale entry from a previous failed setup, then block every NIC.
   local mac

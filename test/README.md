@@ -25,6 +25,7 @@ need, not what they check — open the file for that.
 | `test-managed-key-ssh-opts.sh`      | managed key in ssh/provision opts       | anywhere  | —                                      |
 | `test-ssh-key-path.sh`              | `SSH_KEY_PATH` precedence               | anywhere  | —                                      |
 | `test-tunnel-connection-sharing.sh` | `tunnel` opts out of connection sharing | anywhere  | —                                      |
+| `test-bridge-drop-rule.sh`          | one shared bridge drop rule per host    | anywhere  | nft, unprivileged user namespaces      |
 
 **`test/vm`** scripts drive a real VM through its lifecycle and must be run from
 the fixture directory:
